@@ -9,6 +9,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
+import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefBoolean
@@ -1102,12 +1103,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var epubParseMode: Int
-        get() = appCtx.getPrefInt(PreferKey.epubParseMode, EPUB_PARSE_MODE_NEW)
-            .coerceIn(EPUB_PARSE_MODE_NEW, EPUB_PARSE_MODE_CLASSIC)
+        get() {
+            val value = when (val raw = appCtx.defaultSharedPreferences.all[PreferKey.epubParseMode]) {
+                is Number -> raw.toInt()
+                is String -> raw.toIntOrNull()
+                else -> null
+            } ?: EPUB_PARSE_MODE_NEW
+            return value.coerceIn(EPUB_PARSE_MODE_NEW, EPUB_PARSE_MODE_CLASSIC)
+        }
         set(value) {
-            appCtx.putPrefInt(
+            appCtx.putPrefString(
                 PreferKey.epubParseMode,
-                value.coerceIn(EPUB_PARSE_MODE_NEW, EPUB_PARSE_MODE_CLASSIC)
+                value.coerceIn(EPUB_PARSE_MODE_NEW, EPUB_PARSE_MODE_CLASSIC).toString()
             )
         }
 

@@ -70,6 +70,7 @@ class OtherConfigFragment : PreferenceFragment(),
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         putPrefBoolean(PreferKey.processText, isProcessTextEnabled())
+        migrateListPreferenceValues()
         addPreferencesFromResource(R.xml.pref_config_other)
         upPreferenceSummary(PreferKey.userAgent, AppConfig.userAgent)
         upPreferenceSummary(PreferKey.preDownloadNum, AppConfig.preDownloadNum.toString())
@@ -85,6 +86,19 @@ class OtherConfigFragment : PreferenceFragment(),
         upPreferenceSummary(PreferKey.epubParseMode, AppConfig.epubParseMode.toString())
         onlyUpdateReadPref = findPreference<Preference>(PreferKey.onlyUpdateRead)?.also {
             it.isVisible = AppConfig.autoRefreshBook
+        }
+    }
+
+    private fun migrateListPreferenceValues() {
+        val sharedPreferences = preferenceManager.sharedPreferences ?: return
+        val epubParseMode = sharedPreferences.all[PreferKey.epubParseMode]
+        if (epubParseMode != null && epubParseMode !is String) {
+            val value = epubParseMode.toString().toIntOrNull()
+                ?.coerceIn(AppConfig.EPUB_PARSE_MODE_NEW, AppConfig.EPUB_PARSE_MODE_CLASSIC)
+                ?: AppConfig.EPUB_PARSE_MODE_NEW
+            sharedPreferences.edit()
+                .putString(PreferKey.epubParseMode, value.toString())
+                .apply()
         }
     }
 
