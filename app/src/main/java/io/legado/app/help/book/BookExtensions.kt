@@ -317,8 +317,10 @@ fun Book.isSameNameAuthor(other: Any?): Boolean {
     return false
 }
 
-fun Book.getExportFileName(suffix: String): String {
-    val jsStr = AppConfig.bookExportFileName
+fun Book.getExportFileName(
+    suffix: String,
+    jsStr: String? = AppConfig.bookExportFileName
+): String {
     if (jsStr.isNullOrBlank()) {
         return "$name 作者：${getRealAuthor()}.$suffix"
     }
@@ -332,6 +334,28 @@ fun Book.getExportFileName(suffix: String): String {
     }.onFailure {
         AppLog.put("导出书名规则错误,使用默认规则\n${it.localizedMessage}", it)
     }.getOrDefault("$name 作者：${getRealAuthor()}.$suffix")
+}
+
+fun Book.getLiteralExportFileName(
+    suffix: String,
+    fileName: String? = AppConfig.bookExportFileName
+): String {
+    if (fileName.isNullOrBlank()) {
+        return getExportFileName(suffix, null)
+    }
+    val name = fileName.removeExportFileSuffix("txt", "epub").normalizeFileName()
+    return "$name.$suffix"
+}
+
+fun String.removeExportFileSuffix(vararg suffixes: String): String {
+    val fileName = trim()
+    suffixes.forEach { suffix ->
+        val fileSuffix = ".$suffix"
+        if (fileName.endsWith(fileSuffix, ignoreCase = true)) {
+            return fileName.dropLast(fileSuffix.length)
+        }
+    }
+    return fileName
 }
 
 /**

@@ -83,10 +83,14 @@ class CacheAdapter(context: Context, private val callBack: CallBack) :
                         if (!it.isStop()) {
                             CacheBook.remove(context, book.bookUrl)
                         } else {
-                            CacheBook.start(context, book, 0, book.lastChapterIndex)
+                            callBack.sureCacheBook {
+                                CacheBook.start(context, book, 0, book.lastChapterIndex)
+                            }
                         }
                     } ?: let {
-                        CacheBook.start(context, book, 0, book.lastChapterIndex)
+                        callBack.sureCacheBook {
+                            CacheBook.start(context, book, 0, book.lastChapterIndex)
+                        }
                     }
                 }
             }
@@ -134,6 +138,7 @@ class CacheAdapter(context: Context, private val callBack: CallBack) :
 
     interface CallBack {
         val cacheChapters: HashMap<String, HashSet<String>>
+        fun sureCacheBook(action: () -> Unit)
         fun export(position: Int)
         fun exportProgress(bookUrl: String): Int?
         fun exportMsg(bookUrl: String): String?

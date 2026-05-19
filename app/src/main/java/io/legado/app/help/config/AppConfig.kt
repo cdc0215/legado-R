@@ -1274,6 +1274,75 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.exportPictureFile, value)
         }
 
+    var epubExportTitleColor: String?
+        get() = appCtx.getPrefString(PreferKey.epubExportTitleColor)
+        set(value) {
+            appCtx.putPrefString(PreferKey.epubExportTitleColor, value)
+        }
+
+    var epubExportTextColor: String?
+        get() = appCtx.getPrefString(PreferKey.epubExportTextColor)
+        set(value) {
+            appCtx.putPrefString(PreferKey.epubExportTextColor, value)
+        }
+
+    var epubExportFontPath: String?
+        get() = appCtx.getPrefString(PreferKey.epubExportFontPath)
+        set(value) {
+            appCtx.putPrefString(PreferKey.epubExportFontPath, value)
+        }
+
+    var epubExportEmbedFont: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.epubExportEmbedFont, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.epubExportEmbedFont, value)
+        }
+
+    var epubExportTextSize: Int
+        get() = appCtx.getPrefInt(PreferKey.epubExportTextSize, ReadBookConfig.textSize)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.epubExportTextSize, value)
+        }
+
+    var epubExportLineHeight: Int
+        get() = appCtx.getPrefInt(PreferKey.epubExportLineHeight, ReadBookConfig.lineSpacingExtra)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.epubExportLineHeight, value)
+        }
+
+    var epubExportParagraphSpacing: Int
+        get() = appCtx.getPrefInt(PreferKey.epubExportParagraphSpacing, ReadBookConfig.paragraphSpacing)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.epubExportParagraphSpacing, value)
+        }
+
+    var epubExportParagraphIndent: String
+        get() = appCtx.getPrefString(
+            PreferKey.epubExportParagraphIndent,
+            ReadBookConfig.paragraphIndent.length.coerceAtLeast(0).toString()
+        ) ?: "2"
+        set(value) {
+            appCtx.putPrefString(PreferKey.epubExportParagraphIndent, value)
+        }
+
+    var epubExportBackgroundColor: String?
+        get() = appCtx.getPrefString(PreferKey.epubExportBackgroundColor)
+        set(value) {
+            appCtx.putPrefString(PreferKey.epubExportBackgroundColor, value)
+        }
+
+    var epubExportBackgroundImagePath: String?
+        get() = appCtx.getPrefString(PreferKey.epubExportBackgroundImagePath)
+        set(value) {
+            appCtx.putPrefString(PreferKey.epubExportBackgroundImagePath, value)
+        }
+
+    var epubExportUseBackgroundImage: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.epubExportUseBackgroundImage, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.epubExportUseBackgroundImage, value)
+        }
+
     var parallelExportBook: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.parallelExportBook, false)
         set(value) {

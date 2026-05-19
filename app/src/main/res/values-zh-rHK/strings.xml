@@ -1125,6 +1125,15 @@
     <string name="custom_export">自定義導出</string>
     <string name="file_contains_number">每個文件包含的章節數量</string>
     <string name="export_chapter_index">需要輸出的章節</string>
+    <string name="epub_style">EPUB 樣式</string>
+    <string name="epub_title_color">標題顏色</string>
+    <string name="epub_text_color">正文顏色</string>
+    <string name="epub_font">字體</string>
+    <string name="epub_embed_font">嵌入字體到 EPUB</string>
+    <string name="epub_text_size">正文字號</string>
+    <string name="epub_line_height">行距</string>
+    <string name="epub_paragraph_spacing">段距</string>
+    <string name="epub_paragraph_indent">首行縮排</string>
     <string name="shrink_database">压缩数据库</string>
     <string name="shrink_database_summary">减小数据库文件的大小</string>
     <string name="is_compress">是否压缩</string>
@@ -1223,4 +1232,9 @@
     <string name="epub_parse_mode">EPUB解析方式</string>
     <string name="epub_parse_mode_new">新版</string>
     <string name="epub_parse_mode_classic">經典</string>
+    <string name="export_tab_base">基礎</string>
+    <string name="export_tab_text">文字</string>
+    <string name="export_tab_background">背景</string>
+    <string name="epub_background_color">背景顏色</string>
+    <string name="epub_background_image">背景圖片</string>
 </resources>

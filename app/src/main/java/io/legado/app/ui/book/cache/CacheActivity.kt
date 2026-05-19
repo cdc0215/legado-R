@@ -1,16 +1,23 @@
 package io.legado.app.ui.book.cache
 
 import android.annotation.SuppressLint
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.textfield.TextInputLayout
+import com.jaredrummler.android.colorpicker.ColorPickerDialog
+import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst.charsets
@@ -23,12 +30,13 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ActivityCacheBookBinding
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogSelectSectionExportBinding
-import io.legado.app.help.book.getExportFileName
+import io.legado.app.databinding.DialogExportBookConfigBinding
+import io.legado.app.help.book.getLiteralExportFileName
 import io.legado.app.help.book.isAudio
+import io.legado.app.help.book.removeExportFileSuffix
 import io.legado.app.help.book.tryParesExportFileName
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
@@ -36,14 +44,16 @@ import io.legado.app.model.CacheBook
 import io.legado.app.service.ExportBookService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
+import io.legado.app.utils.FileUtils
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.cnCompare
-import io.legado.app.utils.enableCustomExport
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.iconItemOnLongClick
 import io.legado.app.utils.isContentScheme
@@ -51,9 +61,9 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setIconCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startService
-import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.verificationField
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.utils.externalFiles
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -63,14 +73,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
+import java.io.File
 import kotlin.math.max
 
-/**
- * cache/download 缓存界面
- */
 class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>(),
     MenuItem.OnMenuItemClickListener,
-    CacheAdapter.CallBack {
+    CacheAdapter.CallBack,
+    FontSelectDialog.CallBack,
+    ColorPickerDialogListener {
 
     override val binding by viewBinding(ActivityCacheBookBinding::inflate)
     override val viewModel by viewModels<CacheViewModel>()
@@ -84,6 +94,51 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     private var modernMenuPopup: PopupWindow? = null
     private val groupList: ArrayList<BookGroup> = arrayListOf()
     private var groupId: Long = -1
+    private var pendingExportConfig: ExportConfig? = null
+    private var pendingExportPathBinding: DialogExportBookConfigBinding? = null
+    private var pendingEpubBackgroundBinding: DialogExportBookConfigBinding? = null
+    private var activeExportStyleBinding: DialogExportBookConfigBinding? = null
+
+    companion object {
+        private const val EPUB_TITLE_COLOR = 101
+        private const val EPUB_TEXT_COLOR = 102
+        private const val EPUB_BACKGROUND_COLOR = 103
+    }
+
+    private enum class ExportConfigTab {
+        BASE, TEXT, BACKGROUND
+    }
+
+    private data class ExportConfig(
+        val position: Int,
+        val path: String?,
+        val type: String,
+        val exportCharset: String = AppConfig.exportCharset,
+        val exportUseReplace: Boolean = AppConfig.exportUseReplace,
+        val exportToWebDav: Boolean = AppConfig.exportToWebDav,
+        val exportNoChapterName: Boolean = AppConfig.exportNoChapterName,
+        val exportPictureFile: Boolean = AppConfig.exportPictureFile,
+        val parallelExportBook: Boolean = AppConfig.parallelExportBook,
+        val bookExportFileName: String? = AppConfig.bookExportFileName,
+        val enableCustomExport: Boolean = AppConfig.enableCustomExport,
+        val episodeExportFileName: String? = AppConfig.episodeExportFileName,
+        val epubSize: Int = 1,
+        val epubScope: String? = null,
+        val epubTitleColor: String = AppConfig.epubExportTitleColor ?: ReadBookConfig.textAccentColor.toCssHex(),
+        val epubTextColor: String = AppConfig.epubExportTextColor ?: ReadBookConfig.textColor.toCssHex(),
+        val epubFontPath: String? = ReadBookConfig.textFont.takeIf { it.isNotBlank() }
+            ?: AppConfig.epubExportFontPath,
+        val epubEmbedFont: Boolean = AppConfig.epubExportEmbedFont,
+        val epubTextSize: Int = AppConfig.epubExportTextSize,
+        val epubLineHeight: Int = AppConfig.epubExportLineHeight,
+        val epubParagraphSpacing: Int = AppConfig.epubExportParagraphSpacing,
+        val epubParagraphIndent: String = AppConfig.epubExportParagraphIndent,
+        val epubBackgroundColor: String = defaultEpubBackgroundColor(),
+        val epubBackgroundImagePath: String? = defaultEpubBackgroundImagePath()
+            ?: AppConfig.epubExportBackgroundImagePath,
+        val epubUseBackgroundImage: Boolean = defaultEpubBackgroundImagePath() != null ||
+                AppConfig.epubExportUseBackgroundImage
+    )
 
     private val exportDir = registerForActivityResult(HandleFileContract()) { result ->
         var isReadyPath = false
@@ -102,13 +157,33 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             }
         }
         if (!isReadyPath) {
+            pendingExportPathBinding = null
+            pendingExportConfig = null
             return@registerForActivityResult
         }
-        if (enableCustomExport()) {// 启用自定义导出 and 导出类型为Epub
-            configExportSection(dirPath, result.requestCode)
-        } else {
-            startExport(dirPath, result.requestCode)
+        pendingExportPathBinding?.let {
+            it.setExportPath(dirPath)
+            pendingExportPathBinding = null
+            return@registerForActivityResult
         }
+        pendingExportConfig?.copy(path = dirPath)?.let {
+            pendingExportConfig = null
+            startExport(it)
+        }
+    }
+
+    private val selectEpubBackgroundImage = registerForActivityResult(HandleFileContract()) { result ->
+        val path = result.uri?.let { uri ->
+            if (uri.isContentScheme()) {
+                uri.toString()
+            } else {
+                uri.path
+            }
+        }
+        if (!path.isNullOrBlank()) {
+            pendingEpubBackgroundBinding?.setEpubBackgroundImage(path)
+        }
+        pendingEpubBackgroundBinding = null
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -143,21 +218,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         return super.onPrepareOptionsMenu(menu)
     }
 
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_enable_replace)?.isChecked = AppConfig.exportUseReplace
-        // 菜单打开时读取状态[enableCustomExport]
-        menu.findItem(R.id.menu_enable_custom_export)?.isChecked = AppConfig.enableCustomExport
-        menu.findItem(R.id.menu_export_no_chapter_name)?.isChecked = AppConfig.exportNoChapterName
-        menu.findItem(R.id.menu_export_web_dav)?.isChecked = AppConfig.exportToWebDav
-        menu.findItem(R.id.menu_export_pics_file)?.isChecked = AppConfig.exportPictureFile
-        menu.findItem(R.id.menu_parallel_export)?.isChecked = AppConfig.parallelExportBook
-        menu.findItem(R.id.menu_export_type)?.title =
-            "${getString(R.string.export_type)}(${getTypeName()})"
-        menu.findItem(R.id.menu_export_charset)?.title =
-            "${getString(R.string.export_charset)}(${AppConfig.exportCharset})"
-        return super.onMenuOpened(featureId, menu)
-    }
-
     private fun upMenu() {
         menu?.findItem(R.id.menu_book_group)?.subMenu?.let { subMenu ->
             subMenu.removeGroup(R.id.menu_group)
@@ -167,12 +227,8 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
     }
 
-    /**
-     * 菜单按下回调
-     */
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_download,
             R.id.menu_download_after -> {
                 if (!CacheBook.isRun) sureCacheBook {
                     adapter.getItems().forEach { book ->
@@ -203,21 +259,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 }
             }
 
-            R.id.menu_export_all -> exportAll()
-            R.id.menu_enable_replace -> AppConfig.exportUseReplace = !item.isChecked
-            // 更改菜单状态[enableCustomExport]
-            R.id.menu_enable_custom_export -> AppConfig.enableCustomExport = !item.isChecked
-            R.id.menu_export_no_chapter_name -> AppConfig.exportNoChapterName = !item.isChecked
-            R.id.menu_export_web_dav -> AppConfig.exportToWebDav = !item.isChecked
-            R.id.menu_export_pics_file -> AppConfig.exportPictureFile = !item.isChecked
-            R.id.menu_parallel_export -> AppConfig.parallelExportBook = !item.isChecked
-            R.id.menu_export_folder -> {
-                selectExportFolder(-1)
-            }
-
-            R.id.menu_export_file_name -> alertExportFileName()
-            R.id.menu_export_type -> showExportTypeConfig()
-            R.id.menu_export_charset -> showCharsetConfig()
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             else -> if (item.groupId == R.id.menu_group) {
                 binding.titleBar.subtitle = item.title
@@ -326,154 +367,344 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     }
 
     override fun export(position: Int) {
+        selector(R.string.export_type, exportTypes) { _, index ->
+            showExportConfigDialog(position, exportTypes[index])
+        }
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun showExportConfigDialog(position: Int, exportType: String) {
         val path = ACache.get().getAsString(exportBookPathKey)
-        lifecycleScope.launch {
-            if (path.isNullOrEmpty() ||
-                withContext(IO) { !FileDoc.fromDir(path).checkWrite() }
-            ) {
-                selectExportFolder(position)
-            } else if (enableCustomExport()) {// 启用自定义导出 and 导出类型为Epub
-                configExportSection(path, position)
-            } else {
-                startExport(path, position)
+        val alertBinding = DialogExportBookConfigBinding.inflate(layoutInflater).apply {
+            setExportPath(path)
+            adapter.getItem(position)?.let { book ->
+                tvBookFilenameValue.text =
+                    book.getLiteralExportFileName(exportType, AppConfig.bookExportFileName)
+                        .removeExportFileSuffix(exportType)
+            } ?: run {
+                tvBookFilenameValue.text = AppConfig.bookExportFileName
             }
-        }
-    }
-
-    private fun exportAll() {
-        val path = ACache.get().getAsString(exportBookPathKey)
-        if (path.isNullOrEmpty()) {
-            selectExportFolder(-10)
-        } else {
-            startExport(path, -10)
-        }
-    }
-
-    /**
-     * 配置自定义导出对话框
-     *
-     * @param path  导出路径
-     * @param position  book位置
-     * @author Discut
-     * @since 1.0.0
-     */
-    private fun configExportSection(path: String, position: Int) {
-
-        val alertBinding = DialogSelectSectionExportBinding.inflate(layoutInflater)
-            .apply {
-                fun verifyExportFileNameJsStr(js: String): Boolean {
-                    return tryParesExportFileName(js) && etEpubFilename.text.toString()
-                        .isNotEmpty()
-                }
-
-                fun enableLyEtEpubFilenameIcon() {
-                    lyEtEpubFilename.endIconMode = TextInputLayout.END_ICON_CUSTOM
-                    lyEtEpubFilename.setEndIconOnClickListener {
-                        adapter.getItem(position)?.run {
-                            lyEtEpubFilename.helperText =
-                                if (verifyExportFileNameJsStr(etEpubFilename.text.toString()))
-                                    "${resources.getString(R.string.result_analyzed)}: ${
-                                        getExportFileName(
-                                            "epub",
-                                            1,
-                                            etEpubFilename.text.toString()
-                                        )
-                                    }"
-                                else "Error"
-                        } ?: run {
-                            lyEtEpubFilename.helperText = "Error"
-                            AppLog.put("未找到书籍，position is $position")
-                        }
-                    }
-                }
-                etEpubSize.setText("1")
-                // lyEtEpubFilename.endIconMode = TextInputLayout.END_ICON_NONE
-                etEpubFilename.text?.append(AppConfig.episodeExportFileName)
-                // 存储解析文件名的jsStr
-                etEpubFilename.let {
-                    it.setOnFocusChangeListener { _, hasFocus ->
-                        if (hasFocus)
-                            return@setOnFocusChangeListener
-                        it.text?.run {
-                            if (verifyExportFileNameJsStr(toString())) {
-                                AppConfig.episodeExportFileName = toString()
-                            }
-                        }
-                    }
-                }
-                tvAllExport.setOnClickListener {
-                    cbAllExport.callOnClick()
-                }
-                tvSelectExport.setOnClickListener {
-                    cbSelectExport.callOnClick()
-                }
-                cbSelectExport.onCheckedChangeListener = { _, isChecked ->
-                    if (isChecked) {
-                        etEpubSize.isEnabled = true
-                        etInputScope.isEnabled = true
-                        etEpubFilename.isEnabled = true
-                        enableLyEtEpubFilenameIcon()
-                        cbAllExport.isChecked = false
-                    }
-                }
-                cbAllExport.onCheckedChangeListener = { _, isChecked ->
-                    if (isChecked) {
-                        etEpubSize.isEnabled = false
-                        etInputScope.isEnabled = false
-                        etEpubFilename.isEnabled = false
-                        lyEtEpubFilename.endIconMode = TextInputLayout.END_ICON_NONE
-                        cbSelectExport.isChecked = false
-                    }
-                }
-
-                etInputScope.onFocusChangeListener =
-                    View.OnFocusChangeListener { _, hasFocus ->
-                        if (hasFocus) {
-                            etInputScope.hint = "1-5,8,10-18"
+            tvExportCharsetValue.text = AppConfig.exportCharset
+            tvUseReplaceValue.setBooleanValue(AppConfig.exportUseReplace)
+            tvExportWebDavValue.setBooleanValue(AppConfig.exportToWebDav)
+            tvParallelExportValue.setBooleanValue(AppConfig.parallelExportBook)
+            tvNoChapterNameValue.setBooleanValue(AppConfig.exportNoChapterName)
+            tvExportPicsFileValue.setBooleanValue(AppConfig.exportPictureFile)
+            tvCustomExportValue.setBooleanValue(false)
+            tvEpubFilenameValue.text = AppConfig.episodeExportFileName
+            tvEpubSizeValue.text = "1"
+            tvInputScopeValue.text = ""
+            setEpubTitleColor(AppConfig.epubExportTitleColor ?: ReadBookConfig.textAccentColor.toCssHex())
+            setEpubTextColor(AppConfig.epubExportTextColor ?: ReadBookConfig.textColor.toCssHex())
+            setEpubFont(ReadBookConfig.textFont.takeIf { it.isNotBlank() } ?: AppConfig.epubExportFontPath)
+            tvEpubEmbedFontValue.setBooleanValue(AppConfig.epubExportEmbedFont)
+            tvEpubTextSizeValue.text = AppConfig.epubExportTextSize.toString()
+            tvEpubLineHeightValue.text = AppConfig.epubExportLineHeight.toString()
+            tvEpubParagraphSpacingValue.text = AppConfig.epubExportParagraphSpacing.toString()
+            tvEpubParagraphIndentValue.text = AppConfig.epubExportParagraphIndent
+            setEpubBackgroundColor(defaultEpubBackgroundColor())
+            setEpubBackgroundImage(defaultEpubBackgroundImagePath() ?: AppConfig.epubExportBackgroundImagePath)
+            fun upTypeView() {
+                val isEpub = exportType == "epub"
+                tabExportBar.visibility = if (isEpub) View.VISIBLE else View.GONE
+                rowExportCharset.visibility = if (isEpub) View.GONE else View.VISIBLE
+                rowNoChapterName.visibility = if (isEpub) View.GONE else View.VISIBLE
+                rowExportPicsFile.visibility = if (isEpub) View.GONE else View.VISIBLE
+                rowCustomExport.visibility = View.GONE
+                showExportConfigTab(ExportConfigTab.BASE, isEpub)
+                llCustomExport.visibility = View.GONE
+            }
+            fun upEmbedFontView() {
+                rowEpubEmbedFont.isEnabled = !epubFontPath().isNullOrBlank()
+                tvEpubEmbedFontValue.isEnabled = rowEpubEmbedFont.isEnabled
+            }
+            rowCustomExport.setOnClickListener { }
+            rowEpubTitleColor.setOnClickListener {
+                showEpubColorPicker(EPUB_TITLE_COLOR, tvEpubTitleColorValue.text?.toString())
+            }
+            rowEpubTextColor.setOnClickListener {
+                showEpubColorPicker(EPUB_TEXT_COLOR, tvEpubTextColorValue.text?.toString())
+            }
+            rowEpubBackgroundColor.setOnClickListener {
+                showEpubColorPicker(
+                    EPUB_BACKGROUND_COLOR,
+                    tvEpubBackgroundColorValue.text?.toString()
+                )
+            }
+            rowEpubBackgroundImage.setOnClickListener {
+                val currentPath = epubBackgroundImagePath()
+                if (currentPath.isNullOrBlank()) {
+                    selectEpubBackgroundImage(this)
+                } else {
+                    selector(
+                        R.string.epub_background_image,
+                        arrayListOf(getString(R.string.select_image), getString(R.string.clear))
+                    ) { _, index ->
+                        if (index == 0) {
+                            selectEpubBackgroundImage(this)
                         } else {
-                            etInputScope.hint = ""
+                            setEpubBackgroundImage(null)
                         }
                     }
-
-                // 默认选择自定义导出
-                cbSelectExport.callOnClick()
+                }
             }
-        val alertDialog = alert(titleResource = R.string.select_section_export) {
+            rowEpubFont.setOnClickListener {
+                activeExportStyleBinding = this
+                showDialogFragment<FontSelectDialog>()
+            }
+            btnTabExportBase.setOnClickListener {
+                showExportConfigTab(ExportConfigTab.BASE, exportType == "epub")
+            }
+            btnTabExportText.setOnClickListener {
+                showExportConfigTab(ExportConfigTab.TEXT, exportType == "epub")
+            }
+            btnTabExportBackground.setOnClickListener {
+                showExportConfigTab(ExportConfigTab.BACKGROUND, exportType == "epub")
+            }
+            rowEpubEmbedFont.setOnClickListener {
+                if (rowEpubEmbedFont.isEnabled) {
+                    tvEpubEmbedFontValue.toggleBooleanValue()
+                }
+            }
+            rowEpubTextSize.setOnClickListener {
+                showNumberPicker(
+                    title = getString(R.string.epub_text_size),
+                    value = tvEpubTextSizeValue.text.toString().toIntOrNull()
+                        ?: ReadBookConfig.textSize,
+                    min = 8,
+                    max = 72
+                ) {
+                    tvEpubTextSizeValue.text = it.toString()
+                }
+            }
+            rowEpubLineHeight.setOnClickListener {
+                showNumberPicker(
+                    title = getString(R.string.epub_line_height),
+                    value = tvEpubLineHeightValue.text.toString().toIntOrNull()
+                        ?: ReadBookConfig.lineSpacingExtra,
+                    min = 0,
+                    max = 120
+                ) {
+                    tvEpubLineHeightValue.text = it.toString()
+                }
+            }
+            rowEpubParagraphSpacing.setOnClickListener {
+                showNumberPicker(
+                    title = getString(R.string.epub_paragraph_spacing),
+                    value = tvEpubParagraphSpacingValue.text.toString().toIntOrNull()
+                        ?: ReadBookConfig.paragraphSpacing,
+                    min = 0,
+                    max = 120
+                ) {
+                    tvEpubParagraphSpacingValue.text = it.toString()
+                }
+            }
+            rowEpubParagraphIndent.setOnClickListener {
+                showNumberPicker(
+                    title = getString(R.string.epub_paragraph_indent),
+                    value = tvEpubParagraphIndentValue.text.toString().toIntOrNull()
+                        ?: ReadBookConfig.paragraphIndent.length,
+                    min = 0,
+                    max = 20
+                ) {
+                    tvEpubParagraphIndentValue.text = it.toString()
+                }
+            }
+            rowExportPath.setOnClickListener {
+                pendingExportPathBinding = this
+                selectExportFolder()
+            }
+            rowBookFilename.setOnClickListener {
+                showTextInputDialog(
+                    title = getString(R.string.export_file_name),
+                    value = tvBookFilenameValue.text?.toString().orEmpty()
+                ) {
+                    tvBookFilenameValue.text = it
+                }
+            }
+            rowExportCharset.setOnClickListener {
+                selector(R.string.export_charset, charsets.toList()) { _, index ->
+                    tvExportCharsetValue.text = charsets[index]
+                }
+            }
+            rowUseReplace.setOnClickListener { tvUseReplaceValue.toggleBooleanValue() }
+            rowExportWebDav.setOnClickListener { tvExportWebDavValue.toggleBooleanValue() }
+            rowParallelExport.setOnClickListener { tvParallelExportValue.toggleBooleanValue() }
+            rowNoChapterName.setOnClickListener { tvNoChapterNameValue.toggleBooleanValue() }
+            rowExportPicsFile.setOnClickListener { tvExportPicsFileValue.toggleBooleanValue() }
+            rowEpubFilename.setOnClickListener {
+                showTextInputDialog(
+                    title = getString(R.string.export_file_name),
+                    value = tvEpubFilenameValue.text?.toString().orEmpty()
+                ) {
+                    tvEpubFilenameValue.text = it
+                }
+            }
+            rowEpubSize.setOnClickListener {
+                showNumberPicker(
+                    title = getString(R.string.file_contains_number),
+                    value = tvEpubSizeValue.text.toString().toIntOrNull() ?: 1,
+                    min = 1,
+                    max = 999999
+                ) {
+                    tvEpubSizeValue.text = it.toString()
+                }
+            }
+            rowInputScope.setOnClickListener {
+                showTextInputDialog(
+                    title = getString(R.string.export_chapter_index),
+                    value = tvInputScopeValue.text?.toString().orEmpty(),
+                    hint = "1-5,8,10-18"
+                ) {
+                    tvInputScopeValue.text = it
+                }
+            }
+            upEmbedFontView()
+            upTypeView()
+        }
+        activeExportStyleBinding = alertBinding
+        val alertDialog = alert(title = "${getString(R.string.export)} $exportType") {
             customView { alertBinding.root }
             positiveButton(R.string.ok)
             cancelButton()
         }
-        alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            alertBinding.apply {
-                if (cbAllExport.isChecked) {
-                    startExport(path, position)
-                    alertDialog.hide()
-                    return@apply
-                }
-                val epubScope = etInputScope.text.toString()
-                if (!verificationField(epubScope)) {
-                    etInputScope.error = appCtx.getString(R.string.error_scope_input)//"请输入正确的范围"
-                    return@apply
-                }
-                etInputScope.error = null
-                val epubSize = etEpubSize.text.toString().toIntOrNull() ?: 1
-                adapter.getItem(position)?.let { book ->
-                    startService<ExportBookService> {
-                        action = IntentAction.start
-                        putExtra("bookUrl", book.bookUrl)
-                        putExtra("exportType", "epub")
-                        putExtra("exportPath", path)
-                        putExtra("epubSize", epubSize)
-                        putExtra("epubScope", epubScope)
-                    }
-                }
-                alertDialog.hide()
+        alertDialog.setOnDismissListener {
+            if (activeExportStyleBinding === alertBinding) {
+                activeExportStyleBinding = null
             }
-
+        }
+        alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val exportConfig = alertBinding.readExportConfig(position, exportType, path)
+            if (!saveExportConfig(exportConfig, alertBinding)) {
+                return@setOnClickListener
+            }
+            alertDialog.hide()
+            lifecycleScope.launch {
+                val exportPath = exportConfig.path
+                if (exportPath.isNullOrEmpty() ||
+                    withContext(IO) { !FileDoc.fromDir(exportPath).checkWrite() }
+                ) {
+                    pendingExportConfig = exportConfig
+                    selectExportFolder()
+                } else {
+                    startExport(exportConfig)
+                }
+            }
         }
     }
 
-    private fun selectExportFolder(exportPosition: Int) {
+    private fun DialogExportBookConfigBinding.readExportConfig(
+        position: Int,
+        exportType: String,
+        fallbackPath: String?
+    ): ExportConfig {
+        val customExport = false
+        return ExportConfig(
+            position = position,
+            path = exportPath() ?: fallbackPath,
+            type = exportType,
+            exportCharset = tvExportCharsetValue.text?.toString()?.takeIf { it.isNotBlank() } ?: "UTF-8",
+            exportUseReplace = tvUseReplaceValue.booleanValue(),
+            exportToWebDav = tvExportWebDavValue.booleanValue(),
+            exportNoChapterName = tvNoChapterNameValue.booleanValue(),
+            exportPictureFile = tvExportPicsFileValue.booleanValue(),
+            parallelExportBook = tvParallelExportValue.booleanValue(),
+            bookExportFileName = tvBookFilenameValue.text?.toString(),
+            enableCustomExport = customExport,
+            episodeExportFileName = tvEpubFilenameValue.text?.toString(),
+            epubSize = (tvEpubSizeValue.text.toString().toIntOrNull() ?: 1).coerceAtLeast(1),
+            epubScope = if (customExport) tvInputScopeValue.text?.toString() else null,
+            epubTitleColor = tvEpubTitleColorValue.text?.toString()?.normalizeCssColor()
+                ?: ReadBookConfig.textAccentColor.toCssHex(),
+            epubTextColor = tvEpubTextColorValue.text?.toString()?.normalizeCssColor()
+                ?: ReadBookConfig.textColor.toCssHex(),
+            epubFontPath = epubFontPath(),
+            epubEmbedFont = tvEpubEmbedFontValue.booleanValue(),
+            epubTextSize = (tvEpubTextSizeValue.text.toString().toIntOrNull() ?: ReadBookConfig.textSize)
+                .coerceIn(8, 72),
+            epubLineHeight = (tvEpubLineHeightValue.text.toString().toIntOrNull()
+                ?: ReadBookConfig.lineSpacingExtra).coerceIn(0, 120),
+            epubParagraphSpacing = (tvEpubParagraphSpacingValue.text.toString().toIntOrNull()
+                ?: ReadBookConfig.paragraphSpacing).coerceIn(0, 120),
+            epubParagraphIndent = tvEpubParagraphIndentValue.text?.toString()?.takeIf { it.isNotBlank() }
+                ?: ReadBookConfig.paragraphIndent.length.toString(),
+            epubBackgroundColor = tvEpubBackgroundColorValue.text?.toString()?.normalizeCssColor()
+                ?: defaultEpubBackgroundColor(),
+            epubBackgroundImagePath = epubBackgroundImagePath(),
+            epubUseBackgroundImage = !epubBackgroundImagePath().isNullOrBlank()
+        )
+    }
+
+    private fun saveExportConfig(
+        exportConfig: ExportConfig,
+        binding: DialogExportBookConfigBinding
+    ): Boolean {
+        if (exportConfig.enableCustomExport) {
+            val epubScope = exportConfig.epubScope.orEmpty()
+            if (!verificationField(epubScope)) {
+                binding.tvInputScopeValue.error = appCtx.getString(R.string.error_scope_input)
+                return false
+            }
+            binding.tvInputScopeValue.error = null
+            if (!tryParesExportFileName(exportConfig.episodeExportFileName.orEmpty())) {
+                binding.tvEpubFilenameValue.error = "Error"
+                return false
+            }
+            binding.tvEpubFilenameValue.error = null
+        }
+        if (exportConfig.type == "epub") {
+            if (exportConfig.epubTitleColor.normalizeCssColor() == null) {
+                binding.tvEpubTitleColorValue.error = "Error"
+                return false
+            }
+            binding.tvEpubTitleColorValue.error = null
+            if (exportConfig.epubTextColor.normalizeCssColor() == null) {
+                binding.tvEpubTextColorValue.error = "Error"
+                return false
+            }
+            binding.tvEpubTextColorValue.error = null
+            if (exportConfig.epubBackgroundColor.normalizeCssColor() == null) {
+                binding.tvEpubBackgroundColorValue.error = "Error"
+                return false
+            }
+            binding.tvEpubBackgroundColorValue.error = null
+        }
+        AppConfig.exportType = exportTypes.indexOf(exportConfig.type).coerceAtLeast(0)
+        AppConfig.exportCharset = exportConfig.exportCharset
+        AppConfig.exportUseReplace = exportConfig.exportUseReplace
+        AppConfig.exportToWebDav = exportConfig.exportToWebDav
+        AppConfig.exportNoChapterName = exportConfig.exportNoChapterName
+        AppConfig.exportPictureFile = exportConfig.exportPictureFile
+        AppConfig.parallelExportBook = exportConfig.parallelExportBook
+        AppConfig.bookExportFileName = exportConfig.bookExportFileName
+        AppConfig.enableCustomExport = exportConfig.enableCustomExport
+        AppConfig.episodeExportFileName = exportConfig.episodeExportFileName
+        if (exportConfig.type == "epub") {
+            AppConfig.epubExportTitleColor = exportConfig.epubTitleColor
+            AppConfig.epubExportTextColor = exportConfig.epubTextColor
+            AppConfig.epubExportFontPath = exportConfig.epubFontPath
+            AppConfig.epubExportEmbedFont = exportConfig.epubEmbedFont
+            AppConfig.epubExportTextSize = exportConfig.epubTextSize
+            AppConfig.epubExportLineHeight = exportConfig.epubLineHeight
+            AppConfig.epubExportParagraphSpacing = exportConfig.epubParagraphSpacing
+            AppConfig.epubExportParagraphIndent = exportConfig.epubParagraphIndent
+            AppConfig.epubExportBackgroundColor = exportConfig.epubBackgroundColor
+            AppConfig.epubExportBackgroundImagePath = exportConfig.epubBackgroundImagePath
+            AppConfig.epubExportUseBackgroundImage = exportConfig.epubUseBackgroundImage
+        }
+        return true
+    }
+
+    private fun selectEpubBackgroundImage(binding: DialogExportBookConfigBinding) {
+        pendingEpubBackgroundBinding = binding
+        selectEpubBackgroundImage.launch {
+            mode = HandleFileContract.IMAGE
+            title = getString(R.string.select_image)
+            value = binding.epubBackgroundImagePath()
+        }
+    }
+
+    private fun selectExportFolder() {
         val default = arrayListOf<SelectItem<Int>>()
         val path = ACache.get().getAsString(exportBookPathKey)
         if (!path.isNullOrEmpty()) {
@@ -481,85 +712,46 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
         exportDir.launch {
             otherActions = default
-            requestCode = exportPosition
+            requestCode = pendingExportConfig?.position ?: -1
         }
     }
 
-    private fun startExport(path: String, exportPosition: Int) {
-        val exportType = when (AppConfig.exportType) {
-            1 -> "epub"
-            else -> "txt"
-        }
-        if (exportPosition == -10) {
-            if (adapter.getItems().isNotEmpty()) {
-                adapter.getItems().forEach { book ->
-                    startService<ExportBookService> {
-                        action = IntentAction.start
-                        putExtra("bookUrl", book.bookUrl)
-                        putExtra("exportType", exportType)
-                        putExtra("exportPath", path)
-                    }
+    private fun startExport(exportConfig: ExportConfig) {
+        val path = exportConfig.path ?: return
+        adapter.getItem(exportConfig.position)?.let { book ->
+            startService<ExportBookService> {
+                action = IntentAction.start
+                putExtra("bookUrl", book.bookUrl)
+                putExtra("exportType", exportConfig.type)
+                putExtra("exportPath", path)
+                putExtra("exportCharset", exportConfig.exportCharset)
+                putExtra("exportUseReplace", exportConfig.exportUseReplace)
+                putExtra("exportToWebDav", exportConfig.exportToWebDav)
+                putExtra("exportNoChapterName", exportConfig.exportNoChapterName)
+                putExtra("exportPictureFile", exportConfig.exportPictureFile)
+                putExtra("parallelExportBook", exportConfig.parallelExportBook)
+                putExtra("bookExportFileName", exportConfig.bookExportFileName)
+                putExtra("episodeExportFileName", exportConfig.episodeExportFileName)
+                putExtra("epubTitleColor", exportConfig.epubTitleColor)
+                putExtra("epubTextColor", exportConfig.epubTextColor)
+                putExtra("epubFontPath", exportConfig.epubFontPath)
+                putExtra("epubEmbedFont", exportConfig.epubEmbedFont)
+                putExtra("epubTextSize", exportConfig.epubTextSize)
+                putExtra("epubLineHeight", exportConfig.epubLineHeight)
+                putExtra("epubParagraphSpacing", exportConfig.epubParagraphSpacing)
+                putExtra("epubParagraphIndent", exportConfig.epubParagraphIndent)
+                putExtra("epubBackgroundColor", exportConfig.epubBackgroundColor)
+                putExtra("epubBackgroundImagePath", exportConfig.epubBackgroundImagePath)
+                putExtra("epubUseBackgroundImage", exportConfig.epubUseBackgroundImage)
+                if (exportConfig.enableCustomExport) {
+                    putExtra("epubSize", exportConfig.epubSize)
+                    putExtra("epubScope", exportConfig.epubScope)
                 }
-            } else {
-                toastOnUi(R.string.no_book)
-            }
-        } else if (exportPosition >= 0) {
-            adapter.getItem(exportPosition)?.let { book ->
-                startService<ExportBookService> {
-                    action = IntentAction.start
-                    putExtra("bookUrl", book.bookUrl)
-                    putExtra("exportType", exportType)
-                    putExtra("exportPath", path)
-                }
             }
         }
     }
 
-    @SuppressLint("SetTextI18n")
-    private fun alertExportFileName() {
-        alert(R.string.export_file_name) {
-            val message = "Variable: name, author."
-            setMessage(message)
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "file name js"
-                editView.setText(AppConfig.bookExportFileName)
-            }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.bookExportFileName = alertBinding.editView.text?.toString()
-            }
-            cancelButton()
-        }
-    }
-
-    private fun getTypeName(): String {
-        return exportTypes.getOrElse(AppConfig.exportType) {
-            exportTypes[0]
-        }
-    }
-
-    private fun showExportTypeConfig() {
-        selector(R.string.export_type, exportTypes) { _, i ->
-            AppConfig.exportType = i
-        }
-    }
-
-    private fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset name"
-                editView.setFilterValues(charsets)
-                editView.setText(AppConfig.exportCharset)
-            }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.exportCharset = alertBinding.editView.text?.toString() ?: "UTF-8"
-            }
-            cancelButton()
-        }
-    }
-
-    private fun sureCacheBook(action: () -> Unit) {
+    override fun sureCacheBook(action: () -> Unit) {
         alert(R.string.draw) {
             setMessage(R.string.sure_cache_book)
             noButton()
@@ -580,4 +772,223 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         return ExportBookService.exportMsg[bookUrl]
     }
 
+    override val curFontPath: String
+        get() = activeExportStyleBinding?.epubFontPath().orEmpty()
+
+    override val applySystemTypefaceOnDefault: Boolean
+        get() = false
+
+    override fun selectFont(path: String) {
+        activeExportStyleBinding?.setEpubFont(path)
+    }
+
+    private fun showEpubColorPicker(dialogId: Int, colorText: String?) {
+        activeExportStyleBinding ?: return
+        ColorPickerDialog.newBuilder()
+            .setColor(colorText.normalizeCssColor()?.toColorInt() ?: ReadBookConfig.textColor)
+            .setShowAlphaSlider(false)
+            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+            .setDialogId(dialogId)
+            .show(this)
+    }
+
+    override fun onColorSelected(dialogId: Int, color: Int) {
+        activeExportStyleBinding?.run {
+            when (dialogId) {
+                EPUB_TITLE_COLOR -> setEpubTitleColor(color.toCssHex())
+                EPUB_TEXT_COLOR -> setEpubTextColor(color.toCssHex())
+                EPUB_BACKGROUND_COLOR -> setEpubBackgroundColor(color.toCssHex())
+            }
+        }
+    }
+
+    override fun onDialogDismissed(dialogId: Int) = Unit
+
+    private fun DialogExportBookConfigBinding.setEpubFont(path: String?) {
+        val fontPath = path?.takeIf { it.isNotBlank() }
+        tvEpubFontValue.tag = fontPath
+        tvEpubFontValue.text =
+            fontPath?.let {
+                kotlin.runCatching { FileDoc.fromFile(it).name }.getOrNull()
+                    ?.takeIf { name -> name.isNotBlank() }
+                    ?: File(it).name.takeIf { name -> name.isNotBlank() }
+                    ?: it
+            } ?: getString(R.string.default_font)
+        rowEpubEmbedFont.isEnabled = !fontPath.isNullOrBlank()
+        tvEpubEmbedFontValue.isEnabled = rowEpubEmbedFont.isEnabled
+        if (fontPath.isNullOrBlank()) {
+            tvEpubEmbedFontValue.setBooleanValue(false)
+        } else if (!tvEpubEmbedFontValue.booleanValue()) {
+            tvEpubEmbedFontValue.setBooleanValue(AppConfig.epubExportEmbedFont)
+        }
+    }
+
+    private fun DialogExportBookConfigBinding.epubFontPath(): String? {
+        return (tvEpubFontValue.tag as? String)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun DialogExportBookConfigBinding.setExportPath(path: String?) {
+        val exportPath = path?.takeIf { it.isNotBlank() }
+        tvExportPathValue.tag = exportPath
+        tvExportPathValue.text = exportPath?.let {
+            kotlin.runCatching { FileDoc.fromDir(it).name }.getOrNull()
+                ?.takeIf { name -> name.isNotBlank() }
+                ?: File(it).name.takeIf { name -> name.isNotBlank() }
+                ?: it
+        }.orEmpty()
+    }
+
+    private fun DialogExportBookConfigBinding.exportPath(): String? {
+        return (tvExportPathValue.tag as? String)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun DialogExportBookConfigBinding.showExportConfigTab(
+        tab: ExportConfigTab,
+        isEpub: Boolean
+    ) {
+        val fixedTab = if (isEpub) tab else ExportConfigTab.BASE
+        panelExportBase.visibility = if (fixedTab == ExportConfigTab.BASE) View.VISIBLE else View.GONE
+        panelExportText.visibility = if (isEpub && fixedTab == ExportConfigTab.TEXT) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        panelExportBackground.visibility =
+            if (isEpub && fixedTab == ExportConfigTab.BACKGROUND) View.VISIBLE else View.GONE
+        btnTabExportBase.setExportTabSelected(fixedTab == ExportConfigTab.BASE)
+        btnTabExportText.setExportTabSelected(fixedTab == ExportConfigTab.TEXT)
+        btnTabExportBackground.setExportTabSelected(fixedTab == ExportConfigTab.BACKGROUND)
+    }
+
+    private fun TextView.setExportTabSelected(selected: Boolean) {
+        isSelected = selected
+        background = ColorDrawable(if (selected) 0x1A000000 else Color.TRANSPARENT)
+    }
+
+    private fun DialogExportBookConfigBinding.setEpubTitleColor(color: String) {
+        val cssColor = color.normalizeCssColor() ?: ReadBookConfig.textAccentColor.toCssHex()
+        tvEpubTitleColorValue.text = cssColor
+        vwEpubTitleColorSwatch.background = ColorDrawable(cssColor.toColorInt())
+    }
+
+    private fun DialogExportBookConfigBinding.setEpubTextColor(color: String) {
+        val cssColor = color.normalizeCssColor() ?: ReadBookConfig.textColor.toCssHex()
+        tvEpubTextColorValue.text = cssColor
+        vwEpubTextColorSwatch.background = ColorDrawable(cssColor.toColorInt())
+    }
+
+    private fun DialogExportBookConfigBinding.setEpubBackgroundColor(color: String) {
+        val cssColor = color.normalizeCssColor() ?: defaultEpubBackgroundColor()
+        tvEpubBackgroundColorValue.text = cssColor
+        vwEpubBackgroundColorSwatch.background = ColorDrawable(cssColor.toColorInt())
+    }
+
+    private fun DialogExportBookConfigBinding.setEpubBackgroundImage(path: String?) {
+        val imagePath = path?.takeIf { it.isNotBlank() }
+        tvEpubBackgroundImageValue.tag = imagePath
+        tvEpubBackgroundImageValue.text = imagePath?.toDisplayFileName().orEmpty()
+    }
+
+    private fun DialogExportBookConfigBinding.epubBackgroundImagePath(): String? {
+        return (tvEpubBackgroundImageValue.tag as? String)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun showTextInputDialog(
+        title: String,
+        value: String,
+        hint: String? = null,
+        inputType: Int = InputType.TYPE_CLASS_TEXT,
+        onConfirm: (String) -> Unit
+    ) {
+        val input = EditText(this).apply {
+            setText(value)
+            setSelection(text?.length ?: 0)
+            this.hint = hint
+            this.inputType = inputType
+        }
+        alert(title) {
+            customView { input }
+            okButton {
+                onConfirm(input.text?.toString().orEmpty())
+            }
+            cancelButton()
+        }
+    }
+
+    private fun showNumberPicker(
+        title: String,
+        value: Int,
+        min: Int,
+        max: Int,
+        onConfirm: (Int) -> Unit
+    ) {
+        NumberPickerDialog(this)
+            .setTitle(title)
+            .setMinValue(min)
+            .setMaxValue(max)
+            .setValue(value.coerceIn(min, max))
+            .show {
+                onConfirm(it)
+            }
+    }
+
+}
+
+private fun Int.toCssHex(): String {
+    return "#%06X".format(0xFFFFFF and this)
+}
+
+private fun String?.normalizeCssColor(): String? {
+    val text = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val cssText = if (text.startsWith("#")) text else "#$text"
+    return kotlin.runCatching {
+        cssText.toColorInt().toCssHex()
+    }.getOrNull()
+}
+
+private fun TextView.setBooleanValue(value: Boolean) {
+    text = context.getString(if (value) R.string.yes else R.string.no)
+    tag = value
+}
+
+private fun TextView.toggleBooleanValue() {
+    setBooleanValue(!booleanValue())
+}
+
+private fun TextView.booleanValue(): Boolean {
+    return tag as? Boolean ?: false
+}
+
+private const val EPUB_ASSET_BACKGROUND_PREFIX = "asset://bg/"
+
+private fun defaultEpubBackgroundColor(): String {
+    val config = ReadBookConfig.durConfig
+    if (config.curBgType() == 0) {
+        return config.curBgStr().normalizeCssColor() ?: "#FFFFFF"
+    }
+    return AppConfig.epubExportBackgroundColor.normalizeCssColor() ?: "#FFFFFF"
+}
+
+private fun defaultEpubBackgroundImagePath(): String? {
+    val config = ReadBookConfig.durConfig
+    val bgStr = config.curBgStr().takeIf { it.isNotBlank() } ?: return null
+    return when (config.curBgType()) {
+        1 -> "$EPUB_ASSET_BACKGROUND_PREFIX$bgStr"
+        2 -> if (bgStr.contains(File.separator)) {
+            bgStr
+        } else {
+            FileUtils.getPath(appCtx.externalFiles, "bg", bgStr)
+        }
+        else -> null
+    }
+}
+
+private fun String.toDisplayFileName(): String {
+    if (startsWith(EPUB_ASSET_BACKGROUND_PREFIX)) {
+        return removePrefix(EPUB_ASSET_BACKGROUND_PREFIX).substringAfterLast('/')
+    }
+    return kotlin.runCatching { FileDoc.fromFile(this).name }.getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: File(this).name.takeIf { it.isNotBlank() }
+        ?: this
 }

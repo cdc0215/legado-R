@@ -40,7 +40,7 @@
     <string name="delete_all">删除所有</string>
     <string name="replace">替换</string>
     <string name="replace_purify">替换净化</string>
-    <string name="custom_export_section">自定义Epub导出章节</string>
+    <string name="custom_export_section">自定义导出章节</string>
     <string name="replace_purify_desc">配置替换净化规则</string>
     <string name="not_available">暂无</string>
     <string name="enable">启用</string>
@@ -959,7 +959,7 @@
     <string name="background_image_hint">0 为停用，启用范围 1~25\n半径数值越大，虚化效果越高\n.9.png背景图时此设置无效</string>
     <string name="export_folder">导出文件夹</string>
     <string name="export_charset">导出编码</string>
-    <string name="export_no_chapter_name">TXT 不导出章节名</string>
+    <string name="export_no_chapter_name">不导出章节名</string>
     <string name="export_to_web_dav">导出到 WebDav</string>
     <string name="reverse_content">反转内容</string>
     <string name="debug">调试</string>
@@ -1152,7 +1152,7 @@
     <string name="bitmap_cache_size">图片绘制缓存</string>
     <string name="image_retain_number_summary">保留已读章节数量 %s</string>
     <string name="image_retain_number">漫画保留数量</string>
-    <string name="export_pics_file">TXT 导出图片</string>
+    <string name="export_pics_file">导出图片</string>
     <!-- string end -->
     <string name="error_decode_bitmap">图片解码失败</string>
     <string name="error_image_url_empty">图片链接为空，检查替换净化规则</string>
@@ -1275,6 +1275,15 @@
     <string name="custom_export">自定义导出</string>
     <string name="file_contains_number">每个文件包含的章节数量</string>
     <string name="export_chapter_index">需要输出的章节</string>
+    <string name="epub_style">EPUB 样式</string>
+    <string name="epub_title_color">标题颜色</string>
+    <string name="epub_text_color">正文颜色</string>
+    <string name="epub_font">字体</string>
+    <string name="epub_embed_font">嵌入字体到 EPUB</string>
+    <string name="epub_text_size">正文字号</string>
+    <string name="epub_line_height">行间距</string>
+    <string name="epub_paragraph_spacing">段间距</string>
+    <string name="epub_paragraph_indent">首行缩进</string>
     <string name="shrink_database">压缩数据库</string>
     <string name="shrink_database_summary">减小数据库文件的大小</string>
     <string name="is_compress">是否压缩</string>
@@ -1770,4 +1779,9 @@
     <string name="epub_parse_mode">EPUB解析方式</string>
     <string name="epub_parse_mode_new">新版</string>
     <string name="epub_parse_mode_classic">经典</string>
+    <string name="export_tab_base">基础</string>
+    <string name="export_tab_text">文字</string>
+    <string name="export_tab_background">背景</string>
+    <string name="epub_background_color">背景颜色</string>
+    <string name="epub_background_image">背景图片</string>
 </resources>
