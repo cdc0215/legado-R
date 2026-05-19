@@ -108,7 +108,7 @@ fun buildRequest(request: Request, callback: UrlRequest.Callback): UrlRequest? {
 }
 
 private fun customHost(url: String): String {
-    val urlIp = customIp.remove(url)
+    val urlIp = customIp.remove(url) ?: customIp.remove(url.substringBefore('?'))
     if (AppConfig.hostMap.isEmpty() && urlIp == null) return url
     val host = AppPattern.domainRegex.find(url)?.groupValues?.getOrNull(1) ?: return url
     if (urlIp != null) return url.replaceFirst(host, urlIp)

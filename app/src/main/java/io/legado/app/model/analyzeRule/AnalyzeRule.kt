@@ -213,21 +213,21 @@ class AnalyzeRule(
             if (result is NativeObject) {
                 val sourceRule = ruleList.first()
                 putRule(sourceRule.putMap)
-                sourceRule.makeUpRule(result)
-                result = if (sourceRule.getParamSize() > 1) {
+                val resolvedRule = sourceRule.makeUpRule(result)
+                result = if (resolvedRule.paramSize > 1) {
                     // get {{}}
-                    sourceRule.rule
+                    resolvedRule.rule
                 } else {
                     // 键值直接访问
-                    result[sourceRule.rule]
+                    result[resolvedRule.rule]
                 }
                 result?.let {
-                    if (sourceRule.replaceRegex.isNotEmpty() && it is List<*>) {
+                    if (resolvedRule.replaceRegex.isNotEmpty() && it is List<*>) {
                         result = it.map { o ->
-                            replaceRegex(o.toString(), sourceRule)
+                            replaceRegex(o.toString(), resolvedRule)
                         }
-                    } else if (sourceRule.replaceRegex.isNotEmpty()) {
-                        result = replaceRegex(result.toString(), sourceRule)
+                    } else if (resolvedRule.replaceRegex.isNotEmpty()) {
+                        result = replaceRegex(result.toString(), resolvedRule)
                     }
                 }
             } else if (result is LinkedTreeMap<*, *>) {
@@ -236,9 +236,9 @@ class AnalyzeRule(
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
-                    sourceRule.makeUpRule(result)
+                    val resolvedRule = sourceRule.makeUpRule(result)
                     result ?: continue
-                    val rule = sourceRule.rule
+                    val rule = resolvedRule.rule
                     if (rule.isNotEmpty()) {
                         result = when (sourceRule.mode) {
                             Mode.WebJs -> getWebJsResult(rule, result).let{
@@ -251,14 +251,14 @@ class AnalyzeRule(
                             else -> rule
                         }
                     }
-                    if (sourceRule.replaceRegex.isNotEmpty() && result is List<*>) {
+                    if (resolvedRule.replaceRegex.isNotEmpty() && result is List<*>) {
                         val newList = ArrayList<String>()
                         for (item in result) {
-                            newList.add(replaceRegex(item.toString(), sourceRule))
+                            newList.add(replaceRegex(item.toString(), resolvedRule))
                         }
                         result = newList
-                    } else if (sourceRule.replaceRegex.isNotEmpty()) {
-                        result = replaceRegex(result.toString(), sourceRule)
+                    } else if (resolvedRule.replaceRegex.isNotEmpty()) {
+                        result = replaceRegex(result.toString(), resolvedRule)
                     }
                 }
             }
@@ -313,15 +313,15 @@ class AnalyzeRule(
             if (result is NativeObject) {
                 val sourceRule = ruleList.first()
                 putRule(sourceRule.putMap)
-                sourceRule.makeUpRule(result)
-                result = if (sourceRule.getParamSize() > 1) {
+                val resolvedRule = sourceRule.makeUpRule(result)
+                result = if (resolvedRule.paramSize > 1) {
                     // get {{}}
-                    sourceRule.rule
+                    resolvedRule.rule
                 } else {
                     // 键值直接访问
-                    result[sourceRule.rule]?.toString()
+                    result[resolvedRule.rule]?.toString()
                 }?.let {
-                    replaceRegex(it, sourceRule)
+                    replaceRegex(it, resolvedRule)
                 }
             } else if (result is LinkedTreeMap<*, *>) {
                 // 键值直接访问
@@ -329,10 +329,10 @@ class AnalyzeRule(
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
-                    sourceRule.makeUpRule(result)
+                    val resolvedRule = sourceRule.makeUpRule(result)
                     result ?: continue
-                    val rule = sourceRule.rule
-                    if (rule.isNotBlank() || sourceRule.replaceRegex.isEmpty()) {
+                    val rule = resolvedRule.rule
+                    if (rule.isNotBlank() || resolvedRule.replaceRegex.isEmpty()) {
                         result = when (sourceRule.mode) {
                             Mode.WebJs -> getWebJsResult(rule, result)
                             Mode.Js -> evalJS(rule, result)
@@ -347,8 +347,8 @@ class AnalyzeRule(
                             else -> rule
                         }
                     }
-                    if (result != null && sourceRule.replaceRegex.isNotEmpty()) {
-                        result = replaceRegex(result.toString(), sourceRule)
+                    if (result != null && resolvedRule.replaceRegex.isNotEmpty()) {
+                        result = replaceRegex(result.toString(), resolvedRule)
                     }
                 }
             }
@@ -382,9 +382,9 @@ class AnalyzeRule(
             result = content
             for (sourceRule in ruleList) {
                 putRule(sourceRule.putMap)
-                sourceRule.makeUpRule(result)
+                val resolvedRule = sourceRule.makeUpRule(result)
                 result ?: continue
-                val rule = sourceRule.rule
+                val rule = resolvedRule.rule
                 result = when (sourceRule.mode) {
                     Mode.Regex -> AnalyzeByRegex.getElement(
                         result.toString(),
@@ -397,8 +397,8 @@ class AnalyzeRule(
                     Mode.XPath -> getAnalyzeByXPath(result).getElements(rule)
                     else -> getAnalyzeByJSoup(result).getElements(rule)
                 }
-                if (sourceRule.replaceRegex.isNotEmpty()) {
-                    result = replaceRegex(result.toString(), sourceRule)
+                if (resolvedRule.replaceRegex.isNotEmpty()) {
+                    result = replaceRegex(result.toString(), resolvedRule)
                 }
             }
         }
@@ -479,7 +479,7 @@ class AnalyzeRule(
     /**
      * 正则替换
      */
-    private fun replaceRegex(result: String, rule: SourceRule): String {
+    private fun replaceRegex(result: String, rule: ResolvedSourceRule): String {
         if (rule.replaceRegex.isEmpty()) return result
         val replaceRegex = rule.replaceRegex
         val replacement = rule.replacement
@@ -504,6 +504,14 @@ class AnalyzeRule(
             return result.replace(replaceRegex, replacement)
         }
     }
+
+    internal data class ResolvedSourceRule(
+        val rule: String,
+        val replaceRegex: String = "",
+        val replacement: String = "",
+        val replaceFirst: Boolean = false,
+        val paramSize: Int = 0
+    )
 
     private fun compileRegexCache(regex: String): Regex? {
         return regexCache.getOrPutLimit(regex, 16) {
@@ -541,28 +549,48 @@ class AnalyzeRule(
         } else if (isRegex) {
             mMode = Mode.Regex
         }
+        data class RulePart(
+            val start: Int,
+            val end: Int,
+            val rule: String,
+            val mode: Mode
+        )
         var tmp: String
+        val ruleParts = ArrayList<RulePart>()
         val jsMatcher = JS_PATTERN.matcher(ruleStr)
         while (jsMatcher.find()) {
-            if (jsMatcher.start() > start) {
-                tmp = ruleStr.substring(start, jsMatcher.start()).trim { it <= ' ' }
-                if (tmp.isNotEmpty()) {
-                    ruleList.add(SourceRule(tmp, mMode))
-                }
-            }
-            ruleList.add(SourceRule(jsMatcher.group(2) ?: jsMatcher.group(1), Mode.Js))
-            start = jsMatcher.end()
+            ruleParts.add(
+                RulePart(
+                    jsMatcher.start(),
+                    jsMatcher.end(),
+                    jsMatcher.group(2) ?: jsMatcher.group(1),
+                    Mode.Js
+                )
+            )
         }
         val webJsMatcher = WebJS_PATTERN.matcher(ruleStr)
         while (webJsMatcher.find()) {
-            if (webJsMatcher.start() > start) {
-                tmp = ruleStr.substring(start, webJsMatcher.start()).trim { it <= ' ' }
+            ruleParts.add(
+                RulePart(
+                    webJsMatcher.start(),
+                    webJsMatcher.end(),
+                    webJsMatcher.group(1) ?: "",
+                    Mode.WebJs
+                )
+            )
+        }
+        for (part in ruleParts.sortedBy { it.start }) {
+            if (part.start < start) {
+                continue
+            }
+            if (part.start > start) {
+                tmp = ruleStr.substring(start, part.start).trim { it <= ' ' }
                 if (tmp.isNotEmpty()) {
                     ruleList.add(SourceRule(tmp, mMode))
                 }
             }
-            ruleList.add(SourceRule(webJsMatcher.group(1) ?: "", Mode.WebJs))
-            start = webJsMatcher.end()
+            ruleList.add(SourceRule(part.rule, part.mode))
+            start = part.end
         }
         if (ruleStr.length > start) {
             tmp = ruleStr.substring(start).trim { it <= ' ' }
@@ -711,8 +739,9 @@ class AnalyzeRule(
         /**
          * 替换@get,{{ }}
          */
-        fun makeUpRule(result: Any?) {
+        internal fun makeUpRule(result: Any?): ResolvedSourceRule {
             val infoVal = StringBuilder()
+            var resolvedRule = rule
             if (ruleParam.isNotEmpty()) {
                 var index = ruleParam.size
                 while (index-- > 0) {
@@ -756,20 +785,17 @@ class AnalyzeRule(
                         else -> infoVal.insert(0, ruleParam[index])
                     }
                 }
-                rule = infoVal.toString()
+                resolvedRule = infoVal.toString()
             }
             //分离正则表达式
-            val ruleStrS = rule.split("##")
-            rule = ruleStrS[0].trim()
-            if (ruleStrS.size > 1) {
-                replaceRegex = ruleStrS[1]
-            }
-            if (ruleStrS.size > 2) {
-                replacement = ruleStrS[2]
-            }
-            if (ruleStrS.size > 3) {
-                replaceFirst = true
-            }
+            val ruleStrS = resolvedRule.split("##")
+            return ResolvedSourceRule(
+                rule = ruleStrS[0].trim(),
+                replaceRegex = ruleStrS.getOrElse(1) { "" },
+                replacement = ruleStrS.getOrElse(2) { "" },
+                replaceFirst = ruleStrS.size > 3,
+                paramSize = ruleParam.size
+            )
         }
 
         private fun isRule(ruleStr: String): Boolean {
@@ -779,9 +805,6 @@ class AnalyzeRule(
                     || ruleStr.startsWith("//")
         }
 
-        fun getParamSize(): Int {
-            return ruleParam.size
-        }
     }
 
     enum class Mode {

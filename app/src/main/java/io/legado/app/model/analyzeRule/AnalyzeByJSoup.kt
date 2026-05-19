@@ -93,9 +93,20 @@ class AnalyzeByJSoup(doc: Any) {
                 val temp: ArrayList<String>? =
                     if (sourceRule.isCss) {
                         val lastIndex = ruleStrX.lastIndexOf('@')
-                        getResultLast(
-                            element.select(ruleStrX.take(lastIndex)),
+                        val elements = if (lastIndex == -1) {
+                            element.select(ruleStrX)
+                        } else {
+                            val selector = ruleStrX.take(lastIndex)
+                            if (selector.isBlank()) Elements(element) else element.select(selector)
+                        }
+                        val lastRule = if (lastIndex == -1) {
+                            "text"
+                        } else {
                             ruleStrX.substring(lastIndex + 1)
+                        }
+                        getResultLast(
+                            elements,
+                            lastRule
                         )
                     } else {
                         getResultList(ruleStrX)
@@ -258,9 +269,10 @@ class AnalyzeByJSoup(doc: Any) {
             }
 
             "html" -> {
-                elements.select("script").remove()
-                elements.select("style").remove()
-                val html = elements.outerHtml()
+                val cleanElements = elements.clone()
+                cleanElements.select("script").remove()
+                cleanElements.select("style").remove()
+                val html = cleanElements.outerHtml()
                 if (html.isNotEmpty()) {
                     textS.add(html)
                 }
@@ -311,12 +323,13 @@ class AnalyzeByJSoup(doc: Any) {
                 if (beforeRule.isEmpty()) temp.children() //允许索引直接作为根元素，此时前置规则为空，效果与children相同
                 else {
                     val rules = beforeRule.split(".")
+                    val arg = rules.getOrNull(1)
                     when (rules[0]) {
                         "children" -> temp.children() //允许索引直接作为根元素，此时前置规则为空，效果与children相同
-                        "class" -> temp.getElementsByClass(rules[1])
-                        "tag" -> temp.getElementsByTag(rules[1])
-                        "id" -> Collector.collect(Evaluator.Id(rules[1]), temp)
-                        "text" -> temp.getElementsContainingOwnText(rules[1])
+                        "class" -> arg?.let { temp.getElementsByClass(it) } ?: Elements()
+                        "tag" -> arg?.let { temp.getElementsByTag(it) } ?: Elements()
+                        "id" -> arg?.let { Collector.collect(Evaluator.Id(it), temp) } ?: Elements()
+                        "text" -> arg?.let { temp.getElementsContainingOwnText(it) } ?: Elements()
                         else -> temp.select(beforeRule)
                     }
                 }
