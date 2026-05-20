@@ -1789,4 +1789,8 @@
     <string name="export_tab_background">背景</string>
     <string name="epub_background_color">背景颜色</string>
     <string name="epub_background_image">背景图片</string>
+    <string name="epub_external_template_detected">检测到自定义模板</string>
+    <string name="epub_external_template_prompt">检测到自定义模板会覆盖导出选项，是否继续或使用内置模板？</string>
+    <string name="continue_use_external_template">继续</string>
+    <string name="use_builtin_template">使用内置模板</string>
 </resources>

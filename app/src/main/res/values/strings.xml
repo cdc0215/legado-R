@@ -1456,6 +1456,10 @@
     <string name="export_tab_background">Background</string>
     <string name="epub_background_color">Background color</string>
     <string name="epub_background_image">Background image</string>
+    <string name="epub_external_template_detected">Custom template detected</string>
+    <string name="epub_external_template_prompt">A custom template was detected. It will override export options. Continue with the custom template, or use the built-in template?</string>
+    <string name="continue_use_external_template">Continue</string>
+    <string name="use_builtin_template">Use built-in template</string>
     <string name="shrink_database">Shrink database</string>
     <string name="shrink_database_summary">Reduce the size of the database file</string>
     <string name="is_compress">Compressed or not</string>

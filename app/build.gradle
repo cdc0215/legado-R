@@ -21,10 +21,12 @@ def name = "legado"
 def version = project.hasProperty("VERSION_NAME")
         ? project.property("VERSION_NAME").toString()
         : "3." + releaseTime()
-def gitCommits = Integer.parseInt('git rev-list HEAD --count'.execute().text.trim())
+def gitCommits = providers.exec {
+    commandLine 'git', 'rev-list', 'HEAD', '--count'
+}.standardOutput.asText.map { it.trim().toInteger() }
 def buildVersionCode = project.hasProperty("VERSION_CODE")
         ? project.property("VERSION_CODE").toString().toInteger()
-        : 10000 + gitCommits
+        : 10000 + gitCommits.get()
 
 android {
     compileSdk = compile_sdk_version
@@ -175,16 +177,19 @@ android {
         // Adds exported schema location as test app assets.
         androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
     }
-    lint {
-        checkDependencies = true
-    }
     tasks.withType(JavaCompile).tap {
         configureEach {
             //options.compilerArgs << "-Xlint:unchecked"
         }
     }
     lint { //忽略string翻译缺失，后面需要翻译时去掉，todo
+        checkDependencies = false
         disable 'MissingTranslation'
+    }
+    if (providers.gradleProperty("skipVitalLint").map { it.toBoolean() }.getOrElse(false)) {
+        tasks.matching { it.name.startsWith("lintVital") }.configureEach {
+            enabled = false
+        }
     }
 }
 

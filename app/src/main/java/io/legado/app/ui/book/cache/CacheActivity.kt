@@ -31,7 +31,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ActivityCacheBookBinding
 import io.legado.app.databinding.DialogExportBookConfigBinding
-import io.legado.app.help.book.getLiteralExportFileName
+import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.removeExportFileSuffix
 import io.legado.app.help.book.tryParesExportFileName
@@ -64,6 +64,7 @@ import io.legado.app.utils.startService
 import io.legado.app.utils.verificationField
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.externalFiles
+import io.legado.app.utils.find
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -137,7 +138,8 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         val epubBackgroundImagePath: String? = defaultEpubBackgroundImagePath()
             ?: AppConfig.epubExportBackgroundImagePath,
         val epubUseBackgroundImage: Boolean = defaultEpubBackgroundImagePath() != null ||
-                AppConfig.epubExportUseBackgroundImage
+                AppConfig.epubExportUseBackgroundImage,
+        val epubUseExternalTemplate: Boolean = false
     )
 
     private val exportDir = registerForActivityResult(HandleFileContract()) { result ->
@@ -168,7 +170,9 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
         pendingExportConfig?.copy(path = dirPath)?.let {
             pendingExportConfig = null
-            startExport(it)
+            lifecycleScope.launch {
+                startExportWithTemplateCheck(it)
+            }
         }
     }
 
@@ -379,7 +383,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             setExportPath(path)
             adapter.getItem(position)?.let { book ->
                 tvBookFilenameValue.text =
-                    book.getLiteralExportFileName(exportType, AppConfig.bookExportFileName)
+                    book.getExportFileName(exportType, null)
                         .removeExportFileSuffix(exportType)
             } ?: run {
                 tvBookFilenameValue.text = AppConfig.bookExportFileName
@@ -582,12 +586,12 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             lifecycleScope.launch {
                 val exportPath = exportConfig.path
                 if (exportPath.isNullOrEmpty() ||
-                    withContext(IO) { !FileDoc.fromDir(exportPath).checkWrite() }
+                    withContext(IO) { !isWritableExportDir(exportPath) }
                 ) {
                     pendingExportConfig = exportConfig
                     selectExportFolder()
                 } else {
-                    startExport(exportConfig)
+                    startExportWithTemplateCheck(exportConfig)
                 }
             }
         }
@@ -716,6 +720,34 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
     }
 
+    private suspend fun startExportWithTemplateCheck(exportConfig: ExportConfig) {
+        val exportPath = exportConfig.path ?: return
+        if (exportConfig.type == "epub" && withContext(IO) { hasExternalEpubTemplate(exportPath) }) {
+            showExternalTemplateDialog(exportConfig)
+        } else {
+            startExport(exportConfig.copy(epubUseExternalTemplate = false))
+        }
+    }
+
+    private fun showExternalTemplateDialog(exportConfig: ExportConfig) {
+        alert(R.string.epub_external_template_detected) {
+            setMessage(R.string.epub_external_template_prompt)
+            positiveButton(R.string.continue_use_external_template) {
+                startExport(exportConfig.copy(epubUseExternalTemplate = true))
+            }
+            negativeButton(R.string.use_builtin_template) {
+                startExport(exportConfig.copy(epubUseExternalTemplate = false))
+            }
+            neutralButton(android.R.string.cancel)
+        }
+    }
+
+    private fun hasExternalEpubTemplate(path: String): Boolean {
+        return kotlin.runCatching {
+            FileDoc.fromDir(path).find("Asset")?.isDir == true
+        }.getOrDefault(false)
+    }
+
     private fun startExport(exportConfig: ExportConfig) {
         val path = exportConfig.path ?: return
         adapter.getItem(exportConfig.position)?.let { book ->
@@ -724,7 +756,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 putExtra("bookUrl", book.bookUrl)
                 putExtra("exportType", exportConfig.type)
                 putExtra("exportPath", path)
-                putExtra("exportCharset", exportConfig.exportCharset)
+                putExtra("exportCharset", if (exportConfig.type == "epub") "UTF-8" else exportConfig.exportCharset)
                 putExtra("exportUseReplace", exportConfig.exportUseReplace)
                 putExtra("exportToWebDav", exportConfig.exportToWebDav)
                 putExtra("exportNoChapterName", exportConfig.exportNoChapterName)
@@ -743,12 +775,19 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 putExtra("epubBackgroundColor", exportConfig.epubBackgroundColor)
                 putExtra("epubBackgroundImagePath", exportConfig.epubBackgroundImagePath)
                 putExtra("epubUseBackgroundImage", exportConfig.epubUseBackgroundImage)
+                putExtra("epubUseExternalTemplate", exportConfig.epubUseExternalTemplate)
                 if (exportConfig.enableCustomExport) {
                     putExtra("epubSize", exportConfig.epubSize)
                     putExtra("epubScope", exportConfig.epubScope)
                 }
             }
         }
+    }
+
+    private fun isWritableExportDir(path: String): Boolean {
+        return kotlin.runCatching {
+            FileDoc.fromDir(path).checkWrite()
+        }.getOrDefault(false)
     }
 
     override fun sureCacheBook(action: () -> Unit) {

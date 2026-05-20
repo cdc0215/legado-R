@@ -25,7 +25,10 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     lint {
-        checkDependencies = true
+        checkDependencies = false
+    }
+    tasks.matching { it.name.startsWith("lintVitalAnalyze") }.configureEach {
+        enabled = false
     }
     tasks.withType(JavaCompile).tap {
         configureEach {

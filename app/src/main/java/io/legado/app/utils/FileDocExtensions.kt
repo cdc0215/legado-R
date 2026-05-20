@@ -278,6 +278,27 @@ fun FileDoc.createFileIfNotExist(
     }
 }
 
+fun FileDoc.createFileIfNotExistWithMime(
+    fileName: String,
+    mimeType: String,
+    vararg subDirs: String
+): FileDoc {
+    return if (uri.isContentScheme()) {
+        val documentFile = asDocumentFile()!!
+        val tmp = DocumentUtils.createFileIfNotExistWithMime(
+            documentFile,
+            fileName,
+            mimeType,
+            *subDirs
+        )!!
+        FileDoc.fromDocumentFile(tmp)
+    } else {
+        val path = FileUtils.getPath(uri.path!!, *subDirs) + File.separator + fileName
+        val tmp = FileUtils.createFileIfNotExist(path)
+        FileDoc.fromFile(tmp)
+    }
+}
+
 fun FileDoc.createFolderIfNotExist(
     vararg subDirs: String
 ): FileDoc {
@@ -298,6 +319,10 @@ fun FileDoc.openInputStream(): Result<InputStream> {
 
 fun FileDoc.openOutputStream(): Result<OutputStream> {
     return uri.outputStream(appCtx)
+}
+
+fun FileDoc.openOutputStream(truncate: Boolean): Result<OutputStream> {
+    return uri.outputStream(appCtx, truncate)
 }
 
 fun FileDoc.openReadPfd(): Result<ParcelFileDescriptor> {

@@ -202,19 +202,27 @@ fun Uri.inputStream(context: Context): Result<InputStream> {
 }
 
 fun Uri.outputStream(context: Context): Result<OutputStream> {
+    return outputStream(context, truncate = false)
+}
+
+fun Uri.outputStream(context: Context, truncate: Boolean): Result<OutputStream> {
     val uri = this
     return kotlin.runCatching {
         try {
             if (isContentScheme()) {
                 DocumentFile.fromSingleUri(context, uri)
                     ?: throw NoStackTraceException("未获取到文件")
-                return@runCatching context.contentResolver.openOutputStream(uri)!!
+                return@runCatching if (truncate) {
+                    context.contentResolver.openOutputStream(uri, "rwt")!!
+                } else {
+                    context.contentResolver.openOutputStream(uri)!!
+                }
             } else {
                 val path = RealPathUtil.getPath(context, uri)
                     ?: throw NoStackTraceException("未获取到文件")
                 val file = File(path)
                 if (file.exists()) {
-                    return@runCatching FileOutputStream(file)
+                    return@runCatching FileOutputStream(file, false)
                 } else {
                     throw NoStackTraceException("文件不存在")
                 }

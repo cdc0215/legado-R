@@ -36,11 +36,14 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.activityPendingIntent
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.createFileIfNotExist
+import io.legado.app.utils.createFileIfNotExistWithMime
 import io.legado.app.utils.delete
+import io.legado.app.utils.exists
 import io.legado.app.utils.find
 import io.legado.app.utils.list
 import io.legado.app.utils.mapAsync
 import io.legado.app.utils.mapAsyncIndexed
+import io.legado.app.utils.openInputStream
 import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.servicePendingIntent
@@ -107,7 +110,8 @@ class ExportBookService : BaseService() {
         val epubParagraphIndent: String = AppConfig.epubExportParagraphIndent,
         val epubBackgroundColor: String = AppConfig.epubExportBackgroundColor ?: "#FFFFFF",
         val epubBackgroundImagePath: String? = AppConfig.epubExportBackgroundImagePath,
-        val epubUseBackgroundImage: Boolean = AppConfig.epubExportUseBackgroundImage
+        val epubUseBackgroundImage: Boolean = AppConfig.epubExportUseBackgroundImage,
+        val epubUseExternalTemplate: Boolean = false
     )
 
     private val groupKey = "${appCtx.packageName}.exportBook"
@@ -149,8 +153,8 @@ class ExportBookService : BaseService() {
                             ?: AppConfig.bookExportFileName,
                         episodeExportFileName = intent.getStringExtra("episodeExportFileName")
                             ?: AppConfig.episodeExportFileName,
-                        epubSize = intent.getIntExtra("epubSize", 1),
-                        epubScope = intent.getStringExtra("epubScope"),
+                        epubSize = 1,
+                        epubScope = null,
                         epubTitleColor = intent.getStringExtra("epubTitleColor")
                             ?: AppConfig.epubExportTitleColor
                             ?: "#3F83E8",
@@ -185,6 +189,10 @@ class ExportBookService : BaseService() {
                         epubUseBackgroundImage = intent.getBooleanExtra(
                             "epubUseBackgroundImage",
                             AppConfig.epubExportUseBackgroundImage
+                        ),
+                        epubUseExternalTemplate = intent.getBooleanExtra(
+                            "epubUseExternalTemplate",
+                            false
                         )
                     )
                     waitExportBooks[bookUrl] = exportConfig
@@ -241,6 +249,8 @@ class ExportBookService : BaseService() {
                 getString(R.string.cancel),
                 servicePendingIntent<ExportBookService>(IntentAction.stop)
             )
+        } else {
+            notification.setAutoCancel(true)
         }
         notificationManager.notify(NotificationId.ExportBook, notification.build())
     }
@@ -270,15 +280,7 @@ class ExportBookService : BaseService() {
                     )
                     upExportNotification()
                     if (exportConfig.type == "epub") {
-                        if (exportConfig.epubScope.isNullOrBlank()) {
-                            exportEpub(exportConfig.path, book, exportConfig)
-                        } else {
-                            CustomExporter(
-                                exportConfig.epubScope,
-                                exportConfig.epubSize,
-                                exportConfig
-                            ).export(exportConfig.path, book)
-                        }
+                        exportEpub(exportConfig.path, book, exportConfig)
                     } else {
                         exportTxt(exportConfig.path, book, exportConfig)
                     }
@@ -440,7 +442,6 @@ class ExportBookService : BaseService() {
 
     private suspend fun exportEpub(fileDoc: FileDoc, book: Book, config: ExportConfig) {
         val filename = book.getLiteralExportFileName("epub", config.bookExportFileName)
-        fileDoc.find(filename)?.delete()
 
         val epubBook = EpubBook()
         epubBook.version = "2.0"
@@ -449,19 +450,22 @@ class ExportBookService : BaseService() {
         //set cover
         setCover(book, epubBook)
         //set css
-        val contentModel = setExportStyleAssets(
+        val applyExportStyle = !config.epubUseExternalTemplate
+        if (applyExportStyle) {
+            addExportStyleAssets(epubBook, config)
+        }
+        val contentModel = setAssets(
+            fileDoc,
+            book,
             epubBook,
-            setAssets(fileDoc, book, epubBook),
-            config
+            config.epubUseExternalTemplate,
+            applyExportStyle
         )
 
         //设置正文
         setEpubContent(contentModel, book, epubBook, config)
 
-        val bookDoc = fileDoc.createFileIfNotExist(filename)
-        bookDoc.openOutputStream().getOrThrow().buffered().use { bookOs ->
-            EpubWriter().write(epubBook, bookOs)
-        }
+        val bookDoc = saveEpubBook(fileDoc, filename, epubBook)
 
         if (config.toWebDav) {
             // 导出到webdav
@@ -469,12 +473,51 @@ class ExportBookService : BaseService() {
         }
     }
 
-    private fun setAssets(doc: FileDoc, book: Book, epubBook: EpubBook): String {
+    private fun saveEpubBook(
+        fileDoc: FileDoc,
+        filename: String,
+        epubBook: EpubBook,
+        onProgressing: ((total: Int, progress: Int) -> Unit)? = null
+    ): FileDoc {
+        fileDoc.find(filename)?.delete()
+        val bookDoc = fileDoc.createFileIfNotExistWithMime(filename, "application/epub+zip")
+        bookDoc.openOutputStream(truncate = true).getOrThrow().buffered().use { bookOs ->
+            val writer = EpubWriter()
+            onProgressing?.let { callback ->
+                writer.setCallback(object : EpubWriterProcessor.Callback {
+                    override fun onProgressing(total: Int, progress: Int) {
+                        callback(total, progress)
+                    }
+                })
+            }
+            writer.write(epubBook, bookOs)
+        }
+        val savedDoc = fileDoc.find(filename) ?: bookDoc
+        if (!savedDoc.exists() || !savedDoc.hasContent()) {
+            throw NoStackTraceException("EPUB export failed: empty output file $filename")
+        }
+        return savedDoc
+    }
+
+    private fun FileDoc.hasContent(): Boolean {
+        if (size > 0L) {
+            return true
+        }
+        return openInputStream().getOrNull()?.use { it.read() != -1 } == true
+    }
+
+    private fun setAssets(
+        doc: FileDoc,
+        book: Book,
+        epubBook: EpubBook,
+        useExternalTemplate: Boolean,
+        applyExportStyle: Boolean
+    ): String {
         val customPath = doc.find("Asset")
-        val contentModel = if (customPath == null) {//使用内置模板
-            setAssets(book, epubBook)
-        } else {//外部模板
+        val contentModel = if (useExternalTemplate && customPath != null) {//外部模板
             setAssetsExternal(customPath, book, epubBook)
+        } else {//使用内置模板
+            setAssets(book, epubBook, applyExportStyle)
         }
 
         return contentModel
@@ -547,22 +590,22 @@ class ExportBookService : BaseService() {
         return contentModel
     }
 
-    private fun setAssets(book: Book, epubBook: EpubBook): String {
+    private fun setAssets(book: Book, epubBook: EpubBook, applyExportStyle: Boolean): String {
         epubBook.resources.add(
             Resource(
-                appCtx.assets.open("epub/fonts.css").readBytes(),
+                appCtx.assets.open("epub/fonts.css").use { it.readBytes() },
                 "Styles/fonts.css"
             )
         )
         epubBook.resources.add(
             Resource(
-                appCtx.assets.open("epub/main.css").readBytes(),
+                appCtx.assets.open("epub/main.css").use { it.readBytes() },
                 "Styles/main.css"
             )
         )
         epubBook.resources.add(
             Resource(
-                appCtx.assets.open("epub/logo.png").readBytes(),
+                appCtx.assets.open("epub/logo.png").use { it.readBytes() },
                 "Images/logo.png"
             )
         )
@@ -574,10 +617,13 @@ class ExportBookService : BaseService() {
                 book.getDisplayIntro(),
                 book.kind,
                 book.wordCount,
-                String(appCtx.assets.open("epub/cover.html").readBytes()),
+                readEpubAssetText("epub/cover.html"),
                 "Text/cover.html"
             )
         )
+        val introModel = readEpubAssetText("epub/intro.html").let {
+            if (applyExportStyle) it.withExportCssLink() else it
+        }
         epubBook.addSection(
             getString(R.string.book_intro),
             ResourceUtil.createPublicResource(
@@ -586,18 +632,19 @@ class ExportBookService : BaseService() {
                 book.getDisplayIntro(),
                 book.kind,
                 book.wordCount,
-                String(appCtx.assets.open("epub/intro.html").readBytes()),
+                introModel,
                 "Text/intro.html"
             )
         )
-        return String(appCtx.assets.open("epub/chapter.html").readBytes())
+        return readEpubAssetText("epub/chapter.html").let {
+            if (applyExportStyle) it.withExportCssLink() else it
+        }
     }
 
-    private fun setExportStyleAssets(
+    private fun addExportStyleAssets(
         epubBook: EpubBook,
-        contentModel: String,
         config: ExportConfig
-    ): String {
+    ) {
         val embeddedFontHref = addExportFont(epubBook, config)
         val embeddedBackgroundHref = addExportBackgroundImage(epubBook, config)
         epubBook.resources.add(
@@ -610,7 +657,10 @@ class ExportBookService : BaseService() {
                 "Styles/export.css"
             )
         )
-        return contentModel.withExportCssLink()
+    }
+
+    private fun readEpubAssetText(path: String): String {
+        return appCtx.assets.open(path).use { String(it.readBytes(), Charsets.UTF_8) }
     }
 
     private fun addExportFont(epubBook: EpubBook, config: ExportConfig): String? {
@@ -1031,7 +1081,6 @@ class ExportBookService : BaseService() {
             var contentModel = ""
             for (i in 1..paresNumOfEpub) {
                 val filename = book.getExportFileName("epub", i, config.episodeExportFileName)
-                fileDoc.find(filename)?.delete()
 
                 val epubBook = EpubBook()
                 epubBook.version = "2.0"
@@ -1040,10 +1089,16 @@ class ExportBookService : BaseService() {
                 //set cover
                 setCover(book, epubBook)
                 //set css
-                contentModel = setExportStyleAssets(
+                val applyExportStyle = !config.epubUseExternalTemplate
+                if (applyExportStyle) {
+                    addExportStyleAssets(epubBook, config)
+                }
+                contentModel = setAssets(
+                    fileDoc,
+                    book,
                     epubBook,
-                    setAssets(fileDoc, book, epubBook),
-                    config
+                    config.epubUseExternalTemplate,
+                    applyExportStyle
                 )
 
                 // add epubBook
@@ -1061,16 +1116,7 @@ class ExportBookService : BaseService() {
             fileDoc: FileDoc,
             callback: (total: Int, progress: Int) -> Unit
         ) {
-            val bookDoc = fileDoc.createFileIfNotExist(filename)
-            bookDoc.openOutputStream().getOrThrow().buffered().use { bookOs ->
-                EpubWriter()
-                    .setCallback(object : EpubWriterProcessor.Callback {
-                        override fun onProgressing(total: Int, progress: Int) {
-                            callback(total, progress)
-                        }
-                    })
-                    .write(epubBook, bookOs)
-            }
+            val bookDoc = saveEpubBook(fileDoc, filename, epubBook, callback)
 
             if (config.toWebDav) {
                 // 导出到webdav
