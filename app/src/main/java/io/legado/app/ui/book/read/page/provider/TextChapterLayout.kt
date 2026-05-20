@@ -119,6 +119,8 @@ class TextChapterLayout(
 
     private val viewWidth = ChapterProvider.viewWidth
     private val doublePage = ChapterProvider.doublePage
+    private val isClassicEpub = book.isEpub &&
+        AppConfig.epubParseMode == AppConfig.EPUB_PARSE_MODE_CLASSIC
     private val indentCharWidth = ChapterProvider.indentCharWidth
     private val stringBuilder = StringBuilder()
 
@@ -207,6 +209,7 @@ class TextChapterLayout(
         val textPage = pendingTextPage
         if (textPage.lines.isEmpty() &&
             !textPage.hasEpubContent() &&
+            textPage.epubEmbeddedBlocks.isEmpty() &&
             stringBuilder.isBlank()
         ) {
             return
@@ -279,7 +282,7 @@ class TextChapterLayout(
         val imageStyle = book.getImageStyle()
         val isSingleImageStyle = imageStyle.equals(Book.imgStyleSingle, true)
 
-        val useNovelChrome = !book.isEpub || AppConfig.epubParseMode != AppConfig.EPUB_PARSE_MODE_CLASSIC
+        val useNovelChrome = !isClassicEpub
         if (useNovelChrome && (titleMode != 2 || bookChapter.isVolume || contents.isEmpty())) {
             var firstLine = true
             //标题非隐藏
@@ -379,11 +382,9 @@ class TextChapterLayout(
             }
 
             // 如果是单图模式且当前页有内容，强制分页
-            val keepEpubTitleForNextImage = book.isEpub &&
-                AppConfig.epubParseMode != AppConfig.EPUB_PARSE_MODE_CLASSIC &&
-                pendingTextPage.lines.all { it.isTitle && !it.isImage }
+            val keepTitleForNextImage = pendingTextPage.lines.all { it.isTitle && !it.isImage }
             if (isSingleImageStyle && pendingTextPage.lines.isNotEmpty() && contents.isNotEmpty() &&
-                !keepEpubTitleForNextImage
+                !keepTitleForNextImage
             ) {
                 prepareNextPageIfNeed()
             }
@@ -404,7 +405,9 @@ class TextChapterLayout(
                 } else if (text == EpubFile.READABLE_CONTENT_VERSION_FLAG) {
                     return@forEach
                 } else if (text.startsWith(EpubFile.NATIVE_CONTENT_FLAG)) {
-                    setTypeNativeEpubLayout(text)
+                    if (isClassicEpub) {
+                        setTypeNativeEpubLayout(text)
+                    }
                     return@forEach
                 } else if (text.startsWith("<usehtml")) {
                     val contentStart = text.indexOf('>')
@@ -673,9 +676,6 @@ class TextChapterLayout(
     }
 
     private fun shouldMergeSingleImageWithTitle(src: String): Boolean {
-        if (!book.isEpub || AppConfig.epubParseMode == AppConfig.EPUB_PARSE_MODE_CLASSIC) {
-            return false
-        }
         val lines = pendingTextPage.lines
         if (lines.isEmpty() || lines.any { !it.isTitle || it.isImage }) {
             return false
@@ -695,7 +695,7 @@ class TextChapterLayout(
      * 排版html样式
      */
     private suspend fun setTypeNativeEpubLayout(rawNativeEntry: String): Boolean {
-        if (!book.isEpub) {
+        if (!isClassicEpub) {
             AppLog.put("EPUB Native Layout abort: 当前书籍不是 EPUB, book=${book.name}")
             return false
         }
@@ -899,7 +899,7 @@ class TextChapterLayout(
             when (node) {
                 is TextNode -> htmlBuffer.append(node.outerHtml())
                 is Element -> {
-                    if (node.hasAttr("data-epub-page-bg")) {
+                    if (isClassicEpub && node.hasAttr("data-epub-page-bg")) {
                         flushHtmlBuffer()
                         node.attr("data-epub-page-bg").toEpubTagColor()?.let { color ->
                             if (pendingTextPage.lines.isNotEmpty() || pendingTextPage.hasEpubBackground()) {
@@ -910,15 +910,15 @@ class TextChapterLayout(
                         }
                         return
                     }
-                    if (node.hasEpubPageBreakBefore()) {
+                    if (isClassicEpub && node.hasEpubPageBreakBefore()) {
                         flushHtmlBuffer()
                         prepareNextPageIfNeed()
                     }
-                    if (node.isHtmlBlock() && node.hasEpubBlockSpacingBefore()) {
+                    if (isClassicEpub && node.isHtmlBlock() && node.hasEpubBlockSpacingBefore()) {
                         flushHtmlBuffer()
                         addEpubBlockSpacingBefore(node)
                     }
-                    if (node.isHtmlBlock() && node.hasEpubBlockBoxStyle() && !node.hasHtmlImage()) {
+                    if (isClassicEpub && node.isHtmlBlock() && node.hasEpubBlockBoxStyle() && !node.hasHtmlImage()) {
                         flushHtmlBuffer()
                         setTypeEpubBlockBox(imageStyle, book, node)
                     } else if (node.normalName() == "table") {
@@ -927,7 +927,7 @@ class TextChapterLayout(
                     } else if (node.normalName() == "img") {
                         flushHtmlBuffer()
                         setTypeHtmlImage(imageStyle, book, node)
-                    } else if (node.hasHtmlImage() || node.hasEpubBlockBoxDescendant()) {
+                    } else if (node.hasHtmlImage() || isClassicEpub && node.hasEpubBlockBoxDescendant()) {
                         if (node.isHtmlBlock()) {
                             flushHtmlBuffer()
                         }
@@ -944,11 +944,11 @@ class TextChapterLayout(
                             flushHtmlBuffer()
                         }
                     }
-                    if (node.isHtmlBlock() && node.hasEpubBlockSpacingAfter()) {
+                    if (isClassicEpub && node.isHtmlBlock() && node.hasEpubBlockSpacingAfter()) {
                         flushHtmlBuffer()
                         addEpubBlockSpacingAfter(node)
                     }
-                    if (node.hasEpubPageBreakAfter()) {
+                    if (isClassicEpub && node.hasEpubPageBreakAfter()) {
                         flushHtmlBuffer()
                         prepareNextPageIfNeed()
                     }
@@ -958,7 +958,9 @@ class TextChapterLayout(
         }
 
         val body = Jsoup.parseBodyFragment(htmlContent).body()
-        prepareEpubPageBackground(body, book)
+        if (isClassicEpub) {
+            prepareEpubPageBackground(body, book)
+        }
         body.childNodes().forEach { node ->
             renderNode(node)
         }
@@ -1001,6 +1003,10 @@ class TextChapterLayout(
         book: Book,
         element: Element
     ) {
+        if (!isClassicEpub) {
+            setTypeHtmlText(imageStyle, book, element.outerHtml())
+            return
+        }
         val style = element.epubBlockDecorationStyle() ?: run {
             setTypeHtmlText(imageStyle, book, element.outerHtml())
             return
@@ -1514,7 +1520,7 @@ class TextChapterLayout(
     ) {
         val src = element.attr("src").trim()
         if (src.isBlank()) return
-        if (element.attr("data-epub-background") == "true") {
+        if (isClassicEpub && element.attr("data-epub-background") == "true") {
             ImageProvider.cacheImage(book, src, ReadBook.bookSource)
             if (pendingTextPage.lines.isNotEmpty() || pendingTextPage.epubBackgroundSrc != null) {
                 prepareNextPageIfNeed()

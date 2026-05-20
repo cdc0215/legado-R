@@ -17,6 +17,7 @@ import androidx.annotation.Keep
 import androidx.core.graphics.withTranslation
 import io.legado.app.R
 import io.legado.app.help.PaintPool
+import io.legado.app.help.book.isEpub
 import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -188,7 +189,7 @@ data class TextPage(
      */
     @Suppress("DEPRECATION")
     fun format(): TextPage {
-        if (isNativeEpubPage()) {
+        if (isNativeEpubPage() || epubEmbeddedBlocks.isNotEmpty()) {
             return this
         }
         if (textLines.isEmpty()) isMsgPage = true
@@ -348,15 +349,24 @@ data class TextPage(
     }
 
     fun hasEpubBackground(): Boolean {
-        return epubBackgroundSrc != null || epubBackgroundColor != null
+        return isClassicEpubMode() && (epubBackgroundSrc != null || epubBackgroundColor != null)
     }
 
     fun hasEpubContent(): Boolean {
-        return hasEpubBackground() || epubNativeCommands.isNotEmpty() || epubEmbeddedBlocks.isNotEmpty()
+        return isClassicEpubMode() && (
+            hasEpubBackground() ||
+                epubNativeCommands.isNotEmpty() ||
+                epubEmbeddedBlocks.any { it.role != AdvancedTitleConfig.LOTTIE_BLOCK_ROLE }
+            )
     }
 
     fun isNativeEpubPage(): Boolean {
         return hasEpubContent()
+    }
+
+    private fun isClassicEpubMode(): Boolean {
+        return ReadBook.book?.isEpub == true &&
+            AppConfig.epubParseMode == AppConfig.EPUB_PARSE_MODE_CLASSIC
     }
 
     fun findEpubLinkAt(x: Float, y: Float): String? {

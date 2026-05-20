@@ -2,22 +2,26 @@ package io.legado.app.ui.book.info
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.view.LayoutInflater
+import android.view.ActionMode
 import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import io.legado.app.ui.widget.text.ScrollTextView
 import android.view.textclassifier.TextClassifier
 import android.webkit.WebResourceRequest
@@ -136,6 +140,7 @@ import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 class BookInfoActivity :
     VMBaseActivity<ActivityBookInfoBinding, BookInfoViewModel>(toolBarTheme = Theme.Dark, showOpenMenuIcon = false),
@@ -246,6 +251,11 @@ class BookInfoActivity :
     private val book get() = viewModel.getBook(false)
     private var introExpanded = false
     private var introRawText: CharSequence = ""
+    private var introSelectionMode = false
+    private var introPendingLongPress: Runnable? = null
+    private var introDownX = 0f
+    private var introDownY = 0f
+    private val introTouchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
 
     override val binding by viewBinding(ActivityBookInfoBinding::inflate)
     override val viewModel by viewModels<BookInfoViewModel>()
@@ -261,7 +271,7 @@ class BookInfoActivity :
         }
         view.setTextIsSelectable(false)
         view.typeface = uiTypeface()
-        view.keepDetailTouchInside()
+        view.setupIntroCopyTouch()
         view
     }
 
@@ -669,6 +679,7 @@ class BookInfoActivity :
     }
 
     private fun showBookIntro(book: Book) {
+        exitIntroSelectionMode(refreshText = false)
         introLoadingVisible = false
         introExpanded = false
         val intro = book.getDisplayIntro()
@@ -703,7 +714,7 @@ class BookInfoActivity :
                 initIntroView = false
                 this.pooledWebView = pooledWebView
                 binding.tvIntroContainer.removeAllViews()
-                binding.tvIntroContainer.addView(webView)
+                binding.tvIntroContainer.addView(webView, introContentLayoutParams())
             }
             val bookUrl = viewModel.getBook()?.bookUrl
                 ?.takeIf { it.startsWith("http", true) }
@@ -801,17 +812,19 @@ class BookInfoActivity :
         if (pooledWebView != null || binding.tvIntroContainer.getChildAt(0) !== textView) {
             destroyWeb()
             binding.tvIntroContainer.removeAllViews()
-            binding.tvIntroContainer.addView(textView)
+            binding.tvIntroContainer.addView(textView, introContentLayoutParams())
         }
     }
 
     private fun setIntroContent(content: CharSequence) {
+        exitIntroSelectionMode(refreshText = false)
         introRawText = content
         applyIntroCollapseState()
     }
 
     private fun applyIntroCollapseState() {
         val tvIntro = introTextView
+        if (introSelectionMode) return
         binding.tvIntroToggle.gone()
         tvIntro.maxLines = Int.MAX_VALUE
         val rawText = introRawText
@@ -978,6 +991,7 @@ class BookInfoActivity :
             }
             return@run
         }
+        exitIntroSelectionMode(refreshText = false)
         introLoadingVisible = true
         introRawText = ""
         tvIntroToggle.gone()
@@ -1039,6 +1053,133 @@ class BookInfoActivity :
         showDetailPage(DetailPage.INTRO)
     }
 
+    private fun introContentLayoutParams(): FrameLayout.LayoutParams {
+        val height = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        } else {
+            FrameLayout.LayoutParams.MATCH_PARENT
+        }
+        return FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, height)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun ScrollTextView.setupIntroCopyTouch() {
+        customSelectionActionModeCallback = object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean = true
+
+            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+
+            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
+
+            override fun onDestroyActionMode(mode: ActionMode?) {
+                introTextView.postDelayed({ exitIntroSelectionMode() }, 120L)
+            }
+        }
+        setOnTouchListener { textView, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    introDownX = event.x
+                    introDownY = event.y
+                    cancelIntroLongPress()
+                    if (!introSelectionMode && introRawText.isNotEmpty()) {
+                        introPendingLongPress = Runnable {
+                            val handled = enterIntroSelectionMode()
+                            if (!handled) {
+                                postDelayed({ exitIntroSelectionMode() }, 80L)
+                            }
+                        }.also {
+                            postDelayed(it, ViewConfiguration.getLongPressTimeout().toLong())
+                        }
+                    }
+                    textView.disallowDetailParentIntercept(true)
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val moved = abs(event.x - introDownX) > introTouchSlop ||
+                            abs(event.y - introDownY) > introTouchSlop
+                    if (moved) {
+                        cancelIntroLongPress()
+                    }
+                    textView.disallowDetailParentIntercept(true)
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    cancelIntroLongPress()
+                    if (!introSelectionMode) {
+                        textView.disallowDetailParentIntercept(false)
+                    }
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    cancelIntroLongPress()
+                    exitIntroSelectionMode()
+                    textView.disallowDetailParentIntercept(false)
+                }
+            }
+            false
+        }
+    }
+
+    private fun enterIntroSelectionMode(): Boolean {
+        if (introSelectionMode || introRawText.isEmpty()) return false
+        introSelectionMode = true
+        val savedScrollY = introTextView.scrollY
+        introTextView.setTextIsSelectable(true)
+        restoreIntroScroll(savedScrollY)
+        introTextView.disallowDetailParentIntercept(true)
+        sendIntroSelectionDownEvent()
+        val handled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            introTextView.performLongClick(introDownX, introDownY)
+        } else {
+            introTextView.performLongClick()
+        }
+        restoreIntroScroll(savedScrollY)
+        return handled
+    }
+
+    private fun sendIntroSelectionDownEvent() {
+        val now = SystemClock.uptimeMillis()
+        val downEvent = MotionEvent.obtain(
+            now,
+            now,
+            MotionEvent.ACTION_DOWN,
+            introDownX,
+            introDownY,
+            0
+        )
+        try {
+            introTextView.onTouchEvent(downEvent)
+        } finally {
+            downEvent.recycle()
+        }
+    }
+
+    private fun restoreIntroScroll(scrollY: Int) {
+        introTextView.scrollTo(0, scrollY)
+        introTextView.post {
+            introTextView.scrollTo(0, scrollY)
+            introTextView.refreshScrollBounds()
+        }
+    }
+
+    private fun cancelIntroLongPress() {
+        introPendingLongPress?.let(introTextView::removeCallbacks)
+        introPendingLongPress = null
+    }
+
+    private fun exitIntroSelectionMode(refreshText: Boolean = true) {
+        cancelIntroLongPress()
+        if (!introSelectionMode) return
+        val savedScrollY = introTextView.scrollY
+        introSelectionMode = false
+        introTextView.setTextIsSelectable(false)
+        introTextView.disallowDetailParentIntercept(false)
+        if (refreshText && introRawText.isNotEmpty()) {
+            applyIntroCollapseState()
+        }
+        restoreIntroScroll(savedScrollY)
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private fun View.keepDetailTouchInside() {
         setOnTouchListener { _, event ->
@@ -1061,6 +1202,9 @@ class BookInfoActivity :
     }
 
     private fun showDetailPage(page: DetailPage) = binding.run {
+        if (page != DetailPage.INTRO) {
+            exitIntroSelectionMode()
+        }
         detailPage = page
         llIntroPage.visibility = if (page == DetailPage.INTRO) android.view.View.VISIBLE else android.view.View.GONE
         llTocPage.visibility = if (page == DetailPage.TOC) android.view.View.VISIBLE else android.view.View.GONE

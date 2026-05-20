@@ -287,7 +287,9 @@ object ChapterProvider {
             return
         }
         if (width != viewWidth || height != viewHeight) {
-            if (ReadBook.book?.isEpub == true) {
+            if (ReadBook.book?.isEpub == true &&
+                AppConfig.epubParseMode == AppConfig.EPUB_PARSE_MODE_CLASSIC
+            ) {
                 upViewSizeRunnable?.let {
                     handler.removeCallbacks(it)
                     upViewSizeRunnable = null
