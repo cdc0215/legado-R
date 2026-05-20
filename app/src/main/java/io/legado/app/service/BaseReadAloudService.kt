@@ -21,6 +21,7 @@ import android.media.AudioManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.support.v4.media.MediaMetadataCompat
@@ -107,6 +108,10 @@ abstract class BaseReadAloudService : BaseService(),
 
         @JvmStatic
         var timeMinute: Int = 0
+            private set
+
+        @JvmStatic
+        var runningClass: Class<*>? = null
             private set
 
         fun isPlay(): Boolean {
@@ -214,6 +219,12 @@ abstract class BaseReadAloudService : BaseService(),
 
     @SuppressLint("ClickableViewAccessibility")
     private fun showReadAloudFloatingWindow() {
+        if (!isMainThread()) {
+            lifecycleScope.launch(Main) {
+                showReadAloudFloatingWindow()
+            }
+            return
+        }
         if (floatingView != null) {
             return
         }
@@ -364,16 +375,34 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun updateReadAloudFloatingCover() {
+        if (!isMainThread()) {
+            lifecycleScope.launch(Main) {
+                updateReadAloudFloatingCover()
+            }
+            return
+        }
         floatingCoverView?.setImageDrawable(BitmapDrawable(resources, cover))
     }
 
     private fun updateReadAloudFloatingPlayState() {
+        if (!isMainThread()) {
+            lifecycleScope.launch(Main) {
+                updateReadAloudFloatingPlayState()
+            }
+            return
+        }
         floatingPlayPauseView?.setImageResource(
             if (pause) R.drawable.ic_play_24dp else R.drawable.ic_pause_24dp
         )
     }
 
     private fun removeReadAloudFloatingWindow() {
+        if (!isMainThread()) {
+            lifecycleScope.launch(Main) {
+                removeReadAloudFloatingWindow()
+            }
+            return
+        }
         floatingView?.let { view ->
             runCatching {
                 if (isDesktopFloating) {
@@ -418,6 +447,10 @@ abstract class BaseReadAloudService : BaseService(),
                 putExtra("inBookshelf", ReadBook.inBookshelf)
             }
         }
+    }
+
+    private fun isMainThread(): Boolean {
+        return Looper.myLooper() == Looper.getMainLooper()
     }
 
     private fun currentReadAloudChapterPos(): Int {
@@ -581,6 +614,7 @@ abstract class BaseReadAloudService : BaseService(),
         super.onCreate()
         isRun = true
         pause = false
+        runningClass = this::class.java
         observeLiveBus()
         initMediaSession()
         initBroadcastReceiver()
@@ -705,12 +739,12 @@ abstract class BaseReadAloudService : BaseService(),
 
     override fun onDestroy() {
         super.onDestroy()
-        if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
-        }
+        releaseWakeLocks()
         isRun = false
         pause = true
+        if (runningClass == this::class.java) {
+            runningClass = null
+        }
         abandonFocus()
         unregisterReceiver(broadcastReceiver)
         postEvent(EventBus.ALOUD_STATE, Status.STOP)
@@ -750,19 +784,28 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
         execute(executeContext = IO) {
-            this@BaseReadAloudService.pageIndex = pageIndex
             textChapter = ReadBook.curTextChapter
             val textChapter = textChapter ?: return@execute
             if (!textChapter.isCompleted) {
                 return@execute
             }
-            readAloudNumber = textChapter.getReadLength(pageIndex) + startPos
+            if (textChapter.pageSize <= 0) {
+                stopReadAloudOnInvalidPosition("Read aloud chapter has no page")
+                return@execute
+            }
+            val safePageIndex = pageIndex.coerceIn(0, textChapter.pageSize - 1)
+            this@BaseReadAloudService.pageIndex = safePageIndex
+            val page = textChapter.getPage(safePageIndex)
+            if (page == null) {
+                stopReadAloudOnInvalidPosition("Read aloud page is null, pageIndex=$safePageIndex")
+                return@execute
+            }
+            readAloudNumber = textChapter.getReadLength(safePageIndex) + startPos.coerceAtLeast(0)
             readAloudByPage = getPrefBoolean(PreferKey.readAloudByPage)
             contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0)
                 .split("\n")
                 .filter { it.isNotEmpty() }
-            var pos = startPos
-            val page = textChapter.getPage(pageIndex)!!
+            var pos = startPos.coerceAtLeast(0)
             if (pos > 0) {
                 for (paragraph in page.paragraphs) {
                     val tmp = pos - paragraph.length - 1
@@ -771,15 +814,20 @@ abstract class BaseReadAloudService : BaseService(),
                 }
             }
             nowSpeak = textChapter.getParagraphNum(readAloudNumber + 1, readAloudByPage) - 1
-            if (!readAloudByPage && startPos == 0 && !toLast) {
+            nowSpeak = if (contentList.isEmpty()) {
+                0
+            } else {
+                nowSpeak.coerceIn(0, contentList.lastIndex)
+            }
+            if (!readAloudByPage && startPos == 0 && !toLast && nowSpeak in textChapter.paragraphs.indices) {
                 pos = page.chapterPosition -
                         textChapter.paragraphs[nowSpeak].chapterPosition
             }
             if (toLast) {
                 toLast = false
                 readAloudNumber = textChapter.getLastParagraphPosition()
-                nowSpeak = contentList.lastIndex
-                if (page.paragraphs.size == 1) {
+                nowSpeak = contentList.lastIndex.coerceAtLeast(0)
+                if (contentList.isNotEmpty() && page.paragraphs.size == 1 && nowSpeak in textChapter.paragraphs.indices) {
                     pos = page.chapterPosition -
                             textChapter.paragraphs[nowSpeak].chapterPosition
                 }
@@ -795,10 +843,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     @SuppressLint("WakelockTimeout")
     open fun play() {
-        if (useWakeLock) {
-            wakeLock.acquire()
-            wifiLock?.acquire()
-        }
+        acquireWakeLocks()
         isRun = true
         pause = false
         needResumeOnAudioFocusGain = false
@@ -814,10 +859,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
-        if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
-        }
+        releaseWakeLocks()
         pause = true
         if (abandonFocus) {
             abandonFocus()
@@ -828,6 +870,38 @@ abstract class BaseReadAloudService : BaseService(),
         postEvent(EventBus.ALOUD_STATE, Status.PAUSE)
         ReadBook.uploadProgress()
         doDs()
+    }
+
+    @SuppressLint("WakelockTimeout")
+    private fun acquireWakeLocks() {
+        if (!useWakeLock) return
+        if (!wakeLock.isHeld) {
+            wakeLock.acquire()
+        }
+        wifiLock?.let {
+            if (!it.isHeld) {
+                it.acquire()
+            }
+        }
+    }
+
+    private fun releaseWakeLocks() {
+        if (!useWakeLock) return
+        if (wakeLock.isHeld) {
+            wakeLock.release()
+        }
+        wifiLock?.let {
+            if (it.isHeld) {
+                it.release()
+            }
+        }
+    }
+
+    private fun stopReadAloudOnInvalidPosition(message: String) {
+        AppLog.putDebug(message)
+        lifecycleScope.launch(Main) {
+            stopSelf()
+        }
     }
 
     @SuppressLint("WakelockTimeout")
@@ -860,7 +934,7 @@ abstract class BaseReadAloudService : BaseService(),
                 nowSpeak--
                 readAloudNumber -= contentList[nowSpeak].length + 1 + paragraphStartPos
                 paragraphStartPos = 0
-            } while (contentList[nowSpeak].matches(AppPattern.notReadAloudRegex))
+            } while (nowSpeak > 0 && contentList[nowSpeak].matches(AppPattern.notReadAloudRegex))
             textChapter?.let {
                 if (readAloudByPage) {
                     val paragraphs = it.getParagraphs(true)
@@ -927,11 +1001,14 @@ abstract class BaseReadAloudService : BaseService(),
         postEvent(EventBus.READ_ALOUD_DS, timeMinute)
         upReadAloudNotification()
         dsJob?.cancel()
+        if (timeMinute <= 0) {
+            return
+        }
         dsJob = lifecycleScope.launch {
             while (isActive) {
                 delay(60000)
                 if (!pause) {
-                    if (timeMinute >= 0) {
+                    if (timeMinute > 0) {
                         timeMinute--
                     }
                     if (timeMinute == 0) {

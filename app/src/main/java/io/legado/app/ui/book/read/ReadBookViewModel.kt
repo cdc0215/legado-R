@@ -110,11 +110,18 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 } else {
                     ReadBook.lastBookProgress = null
                 }
-                ReadBook.skipReadAloudSyncOnce = BaseReadAloudService.isRun
-                openChapter(index, chapterPos) {
+                val suppressReadAloudSync = fromReadAloudFloating && BaseReadAloudService.isRun
+                ReadBook.skipReadAloudSyncOnce = suppressReadAloudSync
+                val opened = openChapter(index, chapterPos) {
                     if (BaseReadAloudService.isPlay()) {
                         postEvent(EventBus.TTS_PROGRESS, chapterPos)
                     }
+                    if (suppressReadAloudSync) {
+                        ReadBook.skipReadAloudSyncOnce = false
+                    }
+                }
+                if (!opened && suppressReadAloudSync) {
+                    ReadBook.skipReadAloudSyncOnce = false
                 }
             }
         }.onSuccess {
@@ -364,8 +371,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun openChapter(index: Int, durChapterPos: Int = 0, success: (() -> Unit)? = null) {
-        ReadBook.openChapter(index, durChapterPos, success = success)
+    fun openChapter(index: Int, durChapterPos: Int = 0, success: (() -> Unit)? = null): Boolean {
+        return ReadBook.openChapter(index, durChapterPos, success = success)
     }
 
     fun removeFromBookshelf(success: (() -> Unit)?) {

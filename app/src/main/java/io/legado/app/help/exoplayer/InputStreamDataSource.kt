@@ -25,13 +25,29 @@ class InputStreamDataSource(private val supplier: () -> InputStream) : BaseDataS
         this.dataSpec = dataSpec
         transferInitializing(dataSpec)
 
-        inputStream.skip(dataSpec.position)
+        skipFully(dataSpec.position)
 
         bytesRemaining = dataSpec.length
 
         opened = true
         transferStarted(dataSpec)
         return bytesRemaining
+    }
+
+    @Throws(IOException::class)
+    private fun skipFully(position: Long) {
+        var remaining = position
+        while (remaining > 0) {
+            val skipped = inputStream.skip(remaining)
+            if (skipped > 0) {
+                remaining -= skipped
+                continue
+            }
+            if (inputStream.read() == -1) {
+                throw EOFException()
+            }
+            remaining--
+        }
     }
 
     override fun getUri(): Uri? = dataSpec?.uri

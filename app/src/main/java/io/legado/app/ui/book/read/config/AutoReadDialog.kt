@@ -16,7 +16,6 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
-import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.BaseReadBookActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
@@ -135,10 +134,6 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
 
     private fun upTtsSpeechRate() {
         ReadAloud.upTtsSpeechRate(requireContext())
-        if (!BaseReadAloudService.pause) {
-            ReadAloud.pause(requireContext())
-            ReadAloud.resume(requireContext())
-        }
     }
 
     private fun updateSpeedTitleByMode() {

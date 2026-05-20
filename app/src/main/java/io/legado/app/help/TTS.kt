@@ -25,9 +25,7 @@ class TTS {
 
     private var onInit = false
 
-    private val initListener by lazy {
-        InitListener()
-    }
+    private var initGeneration = 0
 
     private val utteranceListener by lazy {
         TTSUtteranceListener()
@@ -56,8 +54,7 @@ class TTS {
             return
         }
         if (textToSpeech == null) {
-            onInit = true
-            textToSpeech = TextToSpeech(appCtx, initListener)
+            initTts()
         } else {
             addTextToSpeakList()
         }
@@ -69,11 +66,21 @@ class TTS {
 
     @Synchronized
     fun clearTts() {
+        initGeneration++
+        onInit = false
         textToSpeech?.let { tts ->
             tts.stop()
             tts.shutdown()
         }
         textToSpeech = null
+    }
+
+    private fun initTts() {
+        onInit = true
+        val generation = ++initGeneration
+        textToSpeech = TextToSpeech(appCtx) { status ->
+            onTtsInit(generation, status)
+        }
     }
 
     private fun addTextToSpeakList() {
@@ -82,7 +89,7 @@ class TTS {
             var result = tts.speak("", TextToSpeech.QUEUE_FLUSH, null, null)
             if (result == TextToSpeech.ERROR) {
                 clearTts()
-                textToSpeech = TextToSpeech(appCtx, initListener)
+                initTts()
                 return
             }
             text?.splitNotBlank("\n")?.forEachIndexed { i, s ->
@@ -100,18 +107,17 @@ class TTS {
     /**
      * 初始化监听
      */
-    private inner class InitListener : TextToSpeech.OnInitListener {
-
-        override fun onInit(status: Int) {
-            if (status == TextToSpeech.SUCCESS) {
-                textToSpeech?.setOnUtteranceProgressListener(utteranceListener)
-                addTextToSpeakList()
-            } else {
-                appCtx.toastOnUi(R.string.tts_init_failed)
-            }
-            onInit = false
+    private fun onTtsInit(generation: Int, status: Int) {
+        if (generation != initGeneration) {
+            return
         }
-
+        if (status == TextToSpeech.SUCCESS) {
+            textToSpeech?.setOnUtteranceProgressListener(utteranceListener)
+            addTextToSpeakList()
+        } else {
+            appCtx.toastOnUi(R.string.tts_init_failed)
+        }
+        onInit = false
     }
 
     /**

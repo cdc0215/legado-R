@@ -121,8 +121,20 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
         llSetting.setOnClickListener {
             ReadAloudConfigDialog().show(childFragmentManager, "readAloudConfigDialog")
         }
-        tvPre.setOnClickListener { ReadBook.moveToPrevChapter(upContent = true, toLast = false) }
-        tvNext.setOnClickListener { ReadBook.moveToNextChapter(true) }
+        tvPre.setOnClickListener {
+            if (BaseReadAloudService.isRun) {
+                ReadAloud.prevChapter(requireContext())
+            } else {
+                ReadBook.moveToPrevChapter(upContent = true, toLast = false)
+            }
+        }
+        tvNext.setOnClickListener {
+            if (BaseReadAloudService.isRun) {
+                ReadAloud.nextChapter(requireContext())
+            } else {
+                ReadBook.moveToNextChapter(true)
+            }
+        }
         ivStop.setOnClickListener {
             ReadAloud.stop(requireContext())
             dismissAllowingStateLoss()
@@ -248,10 +260,6 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
 
     private fun upTtsSpeechRate() {
         ReadAloud.upTtsSpeechRate(requireContext())
-        if (!BaseReadAloudService.pause) {
-            ReadAloud.pause(requireContext())
-            ReadAloud.resume(requireContext())
-        }
     }
 
     override fun observeLiveBus() {

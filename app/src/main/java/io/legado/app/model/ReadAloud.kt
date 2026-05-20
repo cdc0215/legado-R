@@ -27,6 +27,7 @@ object ReadAloud {
     private fun getReadAloudClass(): Class<*> {
         val ttsEngine = ttsEngine
         if (ttsEngine.isNullOrBlank()) {
+            httpTTS = null
             return TTSReadAloudService::class.java
         }
         if (StringUtils.isNumeric(ttsEngine)) {
@@ -35,12 +36,17 @@ object ReadAloud {
                 return HttpReadAloudService::class.java
             }
         }
+        httpTTS = null
         return TTSReadAloudService::class.java
     }
 
     fun upReadAloudClass() {
         stop(appCtx)
         aloudClass = getReadAloudClass()
+    }
+
+    private fun commandClass(): Class<*> {
+        return BaseReadAloudService.runningClass ?: aloudClass
     }
 
     fun play(
@@ -79,7 +85,7 @@ object ReadAloud {
 
     fun pause(context: Context) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.pause
             context.startForegroundServiceCompat(intent)
         }
@@ -87,7 +93,7 @@ object ReadAloud {
 
     fun resume(context: Context) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.resume
             context.startForegroundServiceCompat(intent)
         }
@@ -95,7 +101,7 @@ object ReadAloud {
 
     fun stop(context: Context) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.stop
             context.startForegroundServiceCompat(intent)
         }
@@ -103,7 +109,7 @@ object ReadAloud {
 
     fun prevParagraph(context: Context) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.prevParagraph
             context.startForegroundServiceCompat(intent)
         }
@@ -111,15 +117,31 @@ object ReadAloud {
 
     fun nextParagraph(context: Context) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.nextParagraph
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
+    fun prevChapter(context: Context) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, commandClass())
+            intent.action = IntentAction.prev
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
+    fun nextChapter(context: Context) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, commandClass())
+            intent.action = IntentAction.next
             context.startForegroundServiceCompat(intent)
         }
     }
 
     fun upTtsSpeechRate(context: Context) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.upTtsSpeechRate
             context.startForegroundServiceCompat(intent)
         }
@@ -127,7 +149,7 @@ object ReadAloud {
 
     fun setTimer(context: Context, minute: Int) {
         if (BaseReadAloudService.isRun) {
-            val intent = Intent(context, aloudClass)
+            val intent = Intent(context, commandClass())
             intent.action = IntentAction.setTimer
             intent.putExtra("minute", minute)
             context.startForegroundServiceCompat(intent)

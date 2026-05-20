@@ -482,8 +482,8 @@ object ReadBook : CoroutineScope by MainScope() {
         durChapterPos: Int = 0,
         upContent: Boolean = true,
         success: (() -> Unit)? = null
-    ) {
-        if (index < chapterSize) {
+    ): Boolean {
+        if (index in 0 until chapterSize) {
             clearTextChapter()
             if (upContent) callBack?.upContent()
             durChapterIndex = index
@@ -492,7 +492,9 @@ object ReadBook : CoroutineScope by MainScope() {
             loadContent(resetPageOffset = true) {
                 success?.invoke()
             }
+            return true
         }
+        return false
     }
 
     /**
