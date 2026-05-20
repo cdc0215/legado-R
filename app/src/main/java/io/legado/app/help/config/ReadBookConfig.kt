@@ -46,16 +46,28 @@ object ReadBookConfig {
     val shareConfigFilePath = FileUtils.getPath(appCtx.filesDir, shareConfigFileName)
     val configList: ArrayList<Config> = arrayListOf()
     lateinit var shareConfig: Config
+    private var activeConfig: Config? = null
+    private var needSaveConfigList = false
     var durConfig
-        get() = getConfig(styleSelect)
+        get() = activeConfig ?: getConfig(styleSelect).copy().also {
+            activeConfig = it
+        }
         set(value) {
-            configList[styleSelect] = value
+            activeConfig = value
             if (shareLayout) {
                 shareConfig = value
             }
         }
 
     var isComic: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                resetActiveConfig()
+            } else {
+                field = value
+            }
+        }
     var bg: Drawable? = null
     var bgMeanColor: Int = 0
     val textColor: Int get() = durConfig.curTextColor()
@@ -69,10 +81,61 @@ object ReadBookConfig {
 
     @Synchronized
     fun getConfig(index: Int): Config {
-        if (configList.isEmpty()) {
-            resetAll()
+        val normalizedIndex = normalizeStyleIndex(index)
+        return if (isBuiltInStyleIndex(normalizedIndex)) {
+            DefaultData.readConfigs[normalizedIndex]
+        } else {
+            configList[customIndex(normalizedIndex)]
         }
-        return configList.getOrNull(index) ?: configList[0]
+    }
+
+    val builtInStyleCount: Int
+        get() = DefaultData.readConfigs.size
+
+    val customStyleStartIndex: Int
+        get() = builtInStyleCount
+
+    val styleCount: Int
+        get() = builtInStyleCount + configList.size
+
+    fun customIndex(globalIndex: Int): Int {
+        return globalIndex - customStyleStartIndex
+    }
+
+    fun customGlobalIndex(customIndex: Int): Int {
+        return customStyleStartIndex + customIndex
+    }
+
+    fun isBuiltInStyleIndex(index: Int): Boolean {
+        return index in 0 until builtInStyleCount
+    }
+
+    fun isCustomStyleIndex(index: Int): Boolean {
+        return customIndex(index) in configList.indices
+    }
+
+    fun isValidStyleIndex(index: Int): Boolean {
+        return isBuiltInStyleIndex(index) || isCustomStyleIndex(index)
+    }
+
+    fun normalizeStyleIndex(index: Int): Int {
+        return when {
+            isValidStyleIndex(index) -> index
+            builtInStyleCount > 0 -> 0
+            configList.isNotEmpty() -> customGlobalIndex(0)
+            else -> 0
+        }
+    }
+
+    fun allStyleConfigs(): List<IndexedValue<Config>> {
+        val styles = arrayListOf<IndexedValue<Config>>()
+        DefaultData.readConfigs.forEachIndexed { index, config ->
+            styles.add(IndexedValue(index, config))
+        }
+        configList.forEachIndexed { index, config ->
+            styles.add(IndexedValue(customGlobalIndex(index), config))
+        }
+        return styles
     }
 
     fun initConfigs() {
@@ -86,10 +149,10 @@ object ReadBookConfig {
                 AppLog.put("读取排版配置文件出错", e)
             }
         }
-        (configs ?: DefaultData.readConfigs).let {
-            configList.clear()
-            configList.addAll(it)
-        }
+        val normalizedConfigs = normalizeCustomConfigs(configs)
+        configList.clear()
+        configList.addAll(normalizedConfigs)
+        activeConfig = null
     }
 
     fun initShareConfig() {
@@ -103,7 +166,73 @@ object ReadBookConfig {
                 e.printOnDebug()
             }
         }
-        shareConfig = c ?: configList.getOrNull(5) ?: Config()
+        shareConfig = c ?: getConfig(5).copy()
+        if (needSaveConfigList) {
+            needSaveConfigList = false
+            save()
+        }
+    }
+
+    private fun normalizeCustomConfigs(configs: List<Config>?): List<Config> {
+        if (configs == null) {
+            return emptyList()
+        }
+        val defaultConfigs = DefaultData.readConfigs
+        if (!isOldFormatConfigList(configs, defaultConfigs)) {
+            return configs.map { it.copy() }
+        }
+        val normalized = arrayListOf<Config>()
+        val names = defaultConfigs.map { it.name }.toHashSet()
+
+        if (configs.size > defaultConfigs.size) {
+            configs.drop(defaultConfigs.size).forEach { customConfig ->
+                val config = customConfig.copy()
+                config.name = uniqueCustomStyleName(config.name.ifBlank { "自定义" }, names)
+                normalized.add(config)
+                names.add(config.name)
+            }
+        }
+
+        defaultConfigs.forEachIndexed { index, defaultConfig ->
+            val savedConfig = configs.getOrNull(index) ?: return@forEachIndexed
+            if (GSON.toJson(savedConfig) != GSON.toJson(defaultConfig)) {
+                val customConfig = savedConfig.copy()
+                customConfig.name = uniqueCustomStyleName(
+                    customConfig.name.ifBlank { defaultConfig.name.ifBlank { "自定义" } },
+                    names
+                )
+                normalized.add(customConfig)
+                names.add(customConfig.name)
+            }
+        }
+
+        needSaveConfigList = true
+        return normalized
+    }
+
+    private fun isOldFormatConfigList(configs: List<Config>, defaultConfigs: List<Config>): Boolean {
+        if (configs.size < defaultConfigs.size) {
+            return false
+        }
+        return defaultConfigs.indices.any { index ->
+            val savedConfig = configs.getOrNull(index) ?: return@any false
+            savedConfig.name == defaultConfigs[index].name ||
+                GSON.toJson(savedConfig.copy(name = defaultConfigs[index].name)) ==
+                GSON.toJson(defaultConfigs[index])
+        }
+    }
+
+    private fun uniqueCustomStyleName(baseName: String, names: Set<String>): String {
+        if (!names.contains(baseName)) {
+            return baseName
+        }
+        var index = 1
+        var name = "$baseName($index)"
+        while (names.contains(name)) {
+            index++
+            name = "$baseName($index)"
+        }
+        return name
     }
 
     fun upBg(width: Int, height: Int) {
@@ -158,26 +287,55 @@ object ReadBookConfig {
     }
 
     fun deleteAt(index: Int): Boolean {
-        if (configList.size <= 1 || index !in configList.indices) {
+        if (!isCustomStyleIndex(index)) {
             return false
         }
-        configList.removeAt(index)
+        val customIndex = customIndex(index)
+        val deleteCurrent = index == styleSelect
+        configList.removeAt(customIndex)
         if (index < readStyleSelect) {
             readStyleSelect -= 1
         } else if (index == readStyleSelect) {
-            readStyleSelect = readStyleSelect.coerceAtMost(configList.lastIndex)
+            readStyleSelect = normalizeStyleIndex(0)
         }
         if (index < comicStyleSelect) {
             comicStyleSelect -= 1
         } else if (index == comicStyleSelect) {
-            comicStyleSelect = comicStyleSelect.coerceAtMost(configList.lastIndex)
+            comicStyleSelect = normalizeStyleIndex(0)
+        }
+        readStyleSelect = normalizeStyleIndex(readStyleSelect)
+        comicStyleSelect = normalizeStyleIndex(comicStyleSelect)
+        if (deleteCurrent) {
+            resetActiveConfig()
         }
         return true
+    }
+
+    fun resetActiveConfig() {
+        activeConfig = getConfig(styleSelect).copy()
+        if (shareLayout) {
+            shareConfig = activeConfig ?: shareConfig
+        }
+    }
+
+    fun setActiveConfig(config: Config, selectedIndex: Int = styleSelect) {
+        styleSelect = selectedIndex
+        activeConfig = config
+        if (shareLayout) {
+            shareConfig = config
+        }
     }
 
     fun clearBgAndCache() {
         val bgs = hashSetOf<String>()
         configList.forEach { config ->
+            repeat(3) {
+                config.getBgPath(it)?.let { path ->
+                    bgs.add(path)
+                }
+            }
+        }
+        activeConfig?.let { config ->
             repeat(3) {
                 config.getBgPath(it)?.let { path ->
                     bgs.add(path)
@@ -195,11 +353,11 @@ object ReadBookConfig {
     }
 
     private fun resetAll() {
-        DefaultData.readConfigs.let {
-            configList.clear()
-            configList.addAll(it)
-            save()
-        }
+        configList.clear()
+        activeConfig = null
+        readStyleSelect = normalizeStyleIndex(readStyleSelect)
+        comicStyleSelect = normalizeStyleIndex(comicStyleSelect)
+        save()
     }
 
     //配置写入读取
@@ -215,13 +373,15 @@ object ReadBookConfig {
             appCtx.putPrefInt(PreferKey.autoReadMode, value)
         }
     var styleSelect: Int
-        get() = if (isComic) comicStyleSelect else readStyleSelect
+        get() = normalizeStyleIndex(if (isComic) comicStyleSelect else readStyleSelect)
         set(value) {
+            val normalizedValue = normalizeStyleIndex(value)
             if (isComic) {
-                comicStyleSelect = value
+                comicStyleSelect = normalizedValue
             } else {
-                readStyleSelect = value
+                readStyleSelect = normalizedValue
             }
+            resetActiveConfig()
         }
     var readStyleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect)
         set(value) {

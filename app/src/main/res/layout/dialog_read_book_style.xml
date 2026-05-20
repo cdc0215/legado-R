@@ -36,15 +36,14 @@
 
             <TextView
                 android:id="@+id/tv_name"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_marginEnd="4dp"
-                android:layout_weight="1"
                 android:ellipsize="end"
+                android:maxWidth="140dp"
                 android:singleLine="true"
-                android:textColor="@color/secondaryText"
-                />
+                android:textColor="@color/secondaryText" />
 
             <ImageView
                 android:id="@+id/iv_edit"
@@ -56,6 +55,11 @@
                 android:src="@drawable/ic_edit"
                 app:tint="@color/secondaryText" />
 
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
             <TextView
                 android:id="@+id/tv_restore"
                 android:layout_width="wrap_content"
@@ -65,29 +69,8 @@
                 android:minWidth="48dp"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:text="@string/restore"
+                android:text="管理样式"
                 android:textColor="@color/primaryText" />
-
-            <ImageView
-                android:id="@+id/iv_import"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/import_str"
-                android:padding="8dp"
-                android:src="@drawable/ic_import"
-                android:tooltipText="@string/import_str" />
-
-            <ImageView
-                android:id="@+id/iv_export"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/export_str"
-                android:padding="8dp"
-                android:src="@drawable/ic_export"
-                android:tooltipText="@string/export_str"
-                />
 
         </LinearLayout>
 

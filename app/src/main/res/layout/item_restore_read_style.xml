@@ -34,6 +34,27 @@
         android:textSize="14sp" />
 
     <ImageView
+        android:id="@+id/iv_save"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/action_save"
+        android:padding="9dp"
+        android:src="@drawable/ic_save"
+        android:visibility="gone"
+        app:tint="@color/secondaryText" />
+
+    <ImageView
+        android:id="@+id/iv_export"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/export_str"
+        android:padding="9dp"
+        android:src="@drawable/ic_export"
+        app:tint="@color/secondaryText" />
+
+    <ImageView
         android:id="@+id/iv_delete"
         android:layout_width="40dp"
         android:layout_height="40dp"

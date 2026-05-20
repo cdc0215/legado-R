@@ -14,6 +14,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.CompoundButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.graphics.toColorInt
 import androidx.core.view.get
@@ -34,7 +35,6 @@ import io.legado.app.databinding.DialogReadBookStyleBinding
 import io.legado.app.databinding.ItemBgImageBinding
 import io.legado.app.databinding.ItemReadStyleBinding
 import io.legado.app.databinding.ItemRestoreReadStyleBinding
-import io.legado.app.help.DefaultData
 import io.legado.app.help.book.isImage
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -110,12 +110,18 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private var currentStyleTab = StyleTab.TEXT
     private var firstStyleTabHeight = 0
     private val importFormNet = "网络导入"
+    private val draftStyleIndex = -1
     private var savedConfigSnapshot = ""
+    private var pendingExportConfig: ReadBookConfig.Config? = null
+    private var reloadStyleManager: (() -> Unit)? = null
     private val selectBgImage = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri -> setBgFromUri(uri) }
     }
     private val selectExportDir = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri -> exportConfig(uri) }
+        it.uri?.let { uri ->
+            exportConfig(uri, pendingExportConfig ?: ReadBookConfig.durConfig)
+        }
+        pendingExportConfig = null
     }
     private val selectImportDoc = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
@@ -183,7 +189,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private fun initData() {
         binding.cbShareLayout.isChecked = ReadBookConfig.shareLayout
         upView()
-        savedConfigSnapshot = GSON.toJson(ReadBookConfig.durConfig)
+        savedConfigSnapshot = savedStyleSnapshot()
     }
 
     private fun initViewEvent() = binding.run {
@@ -200,36 +206,9 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         btnTabStyle.setOnClickListener { showStyleTab(StyleTab.STYLE) }
 
         ivEdit.setOnClickListener {
-            alert(R.string.style_name) {
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = "name"
-                    editView.setText(ReadBookConfig.durConfig.name)
-                    root.applyUiBodyTypefaceDeep(requireContext().uiTypeface())
-                }
-                customView { alertBinding.root }
-                okButton {
-                    alertBinding.editView.text?.toString()?.let {
-                        tvName.text = it
-                        ReadBookConfig.durConfig.name = it
-                    }
-                }
-                cancelButton()
-            }
+            editDraftStyleName()
         }
-        tvRestore.setOnClickListener { restoreStyleWithUnsavedCheck() }
-        ivImport.setOnClickListener {
-            selectImportDoc.launch {
-                mode = HandleFileContract.FILE
-                title = getString(R.string.import_str)
-                allowExtensions = arrayOf("zip")
-                otherActions = arrayListOf(SelectItem(importFormNet, -1))
-            }
-        }
-        ivExport.setOnClickListener {
-            selectExportDir.launch {
-                title = getString(R.string.export_str)
-            }
-        }
+        tvRestore.setOnClickListener { showStyleManager() }
 
         rowTextColor.setOnClickListener {
             ColorPickerDialog.newBuilder()
@@ -468,11 +447,14 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     }
 
     private fun changeBgTextConfig(index: Int) {
-        if (index !in ReadBookConfig.configList.indices || index == ReadBookConfig.styleSelect) {
+        if (!ReadBookConfig.isValidStyleIndex(index)) {
             return
         }
-        ReadBookConfig.styleSelect = index
-        savedConfigSnapshot = GSON.toJson(ReadBookConfig.durConfig)
+        if (index == ReadBookConfig.styleSelect && !isUnsavedCurrentStyle()) {
+            return
+        }
+        ReadBookConfig.setActiveConfig(ReadBookConfig.getConfig(index).copy(), index)
+        savedConfigSnapshot = savedStyleSnapshot()
         upView()
         postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
         if (AppConfig.readBarStyleFollowPage) {
@@ -481,9 +463,12 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     }
 
     private fun restoreStyleToCurrent(index: Int) {
-        val restoredConfig = ReadBookConfig.configList.getOrNull(index)?.copy() ?: return
-        ReadBookConfig.durConfig = restoredConfig
-        savedConfigSnapshot = GSON.toJson(restoredConfig)
+        if (!ReadBookConfig.isValidStyleIndex(index)) {
+            return
+        }
+        val restoredConfig = ReadBookConfig.getConfig(index).copy()
+        ReadBookConfig.setActiveConfig(restoredConfig, index)
+        savedConfigSnapshot = savedStyleSnapshot()
         upView()
         postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
         postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
@@ -532,8 +517,12 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         showStyleTab(currentStyleTab, requestLayout = false)
 
         ivEdit.setColorFilter(secondaryTextColor, PorterDuff.Mode.SRC_IN)
-        ivImport.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
-        ivExport.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
+        tvRestore.background = UiCorner.opaqueRoundedStroke(
+            Color.TRANSPARENT,
+            UiCorner.actionRadius(requireContext()),
+            1.dpToPx(),
+            ColorUtils.withAlpha(primaryTextColor, 0.45f)
+        )
         applyDialogTextColors()
     }
 
@@ -849,7 +838,56 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         return "#${hexString}".uppercase(Locale.ROOT)
     }
 
-    private fun saveCurrentAsCustomStyle(onSaved: (() -> Unit)? = null) {
+    private fun savedStyleSnapshot(): String {
+        return GSON.toJson(ReadBookConfig.getConfig(ReadBookConfig.styleSelect))
+    }
+
+    private fun isUnsavedCurrentStyle(): Boolean {
+        return GSON.toJson(ReadBookConfig.durConfig) != savedConfigSnapshot
+    }
+
+    private fun isBuiltInStyle(index: Int): Boolean {
+        return ReadBookConfig.isBuiltInStyleIndex(index)
+    }
+
+    private fun styleDisplayName(config: ReadBookConfig.Config, isBuiltIn: Boolean): String {
+        return config.name.ifBlank {
+            if (isBuiltIn) "文字" else "自定义"
+        }
+    }
+
+    private fun styleDisplayName(index: Int): String {
+        return styleDisplayName(ReadBookConfig.getConfig(index), isBuiltInStyle(index))
+    }
+
+    private fun uniqueStyleName(baseName: String): String {
+        var index = 1
+        var newName = "$baseName($index)"
+        val names = ReadBookConfig.allStyleConfigs().map { styleDisplayName(it.index) }.toHashSet()
+        while (names.contains(newName)) {
+            index++
+            newName = "$baseName($index)"
+        }
+        return newName
+    }
+
+    private fun launchImportStyle() {
+        selectImportDoc.launch {
+            mode = HandleFileContract.FILE
+            title = getString(R.string.import_str)
+            allowExtensions = arrayOf("zip")
+            otherActions = arrayListOf(SelectItem(importFormNet, -1))
+        }
+    }
+
+    private fun launchExportStyle(config: ReadBookConfig.Config) {
+        pendingExportConfig = config.copy()
+        selectExportDir.launch {
+            title = getString(R.string.export_str)
+        }
+    }
+
+    private fun editDraftStyleName() {
         alert(R.string.style_name) {
             val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                 editView.hint = "name"
@@ -860,26 +898,55 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             okButton {
                 val styleName = alertBinding.editView.text?.toString()?.trim().orEmpty()
                     .ifBlank { "自定义" }
-                val newConfig = ReadBookConfig.durConfig.copy(name = styleName)
-                val existingIndex = ReadBookConfig.configList.withIndex()
-                    .firstOrNull {
-                        it.index != ReadBookConfig.styleSelect && it.value.name == styleName
-                    }?.index ?: -1
-                if (existingIndex >= 0) {
-                    alert("覆盖样式") {
-                        setMessage("已存在同名样式，是否覆盖？")
-                        positiveButton("覆盖") {
-                            saveStyleAt(existingIndex, newConfig, onSaved)
-                        }
-                        cancelButton()
-                    }
-                } else {
-                    ReadBookConfig.configList.add(newConfig)
-                    saveStyleAt(ReadBookConfig.configList.lastIndex, newConfig, onSaved)
-                }
+                ReadBookConfig.durConfig.name = styleName
+                upView()
+                reloadStyleManager?.invoke()
+                postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
             }
             cancelButton()
         }
+    }
+
+    private fun saveCurrentAsCustomStyle(onSaved: (() -> Unit)? = null) {
+        saveCurrentStyleByName(
+            styleDisplayName(ReadBookConfig.durConfig, isBuiltInStyle(ReadBookConfig.styleSelect)),
+            onSaved
+        )
+    }
+
+    private fun saveCurrentStyleByName(
+        styleName: String,
+        onSaved: (() -> Unit)? = null
+    ) {
+        val existingIndex = ReadBookConfig.allStyleConfigs()
+            .firstOrNull { styleDisplayName(it.index) == styleName }?.index ?: -1
+        val newConfig = ReadBookConfig.durConfig.copy(name = styleName)
+        when {
+            existingIndex < 0 -> saveStyleAsNew(newConfig, onSaved)
+            isBuiltInStyle(existingIndex) -> {
+                saveStyleAsNew(newConfig.copy(name = uniqueStyleName(styleName)), onSaved)
+            }
+            else -> {
+                alert("覆盖样式") {
+                    setMessage("已存在同名样式，是否覆盖？")
+                    positiveButton("覆盖") {
+                        saveStyleAt(existingIndex, newConfig, onSaved)
+                    }
+                    negativeButton("不覆盖") {
+                        saveStyleAsNew(newConfig.copy(name = uniqueStyleName(styleName)), onSaved)
+                    }
+                    cancelButton()
+                }
+            }
+        }
+    }
+
+    private fun saveStyleAsNew(
+        config: ReadBookConfig.Config,
+        onSaved: (() -> Unit)? = null
+    ) {
+        ReadBookConfig.configList.add(config)
+        saveStyleAt(ReadBookConfig.customGlobalIndex(ReadBookConfig.configList.lastIndex), config, onSaved)
     }
 
     private fun saveStyleAt(
@@ -887,11 +954,15 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         config: ReadBookConfig.Config,
         onSaved: (() -> Unit)? = null
     ) {
-        ReadBookConfig.configList[index] = config
-        ReadBookConfig.styleSelect = index
-        savedConfigSnapshot = GSON.toJson(config)
+        if (!ReadBookConfig.isCustomStyleIndex(index)) {
+            return
+        }
+        ReadBookConfig.configList[ReadBookConfig.customIndex(index)] = config
+        ReadBookConfig.setActiveConfig(config.copy(), index)
+        savedConfigSnapshot = savedStyleSnapshot()
         ReadBookConfig.save()
         upView()
+        reloadStyleManager?.invoke()
         postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
         if (AppConfig.readBarStyleFollowPage) {
             postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
@@ -899,66 +970,156 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         onSaved?.invoke()
     }
 
-    private fun restoreStyleWithUnsavedCheck() {
-        if (GSON.toJson(ReadBookConfig.durConfig) == savedConfigSnapshot) {
-            showRestoreStyleSelector()
-            return
-        }
-        alert("保存当前样式?") {
-            setMessage("当前颜色和背景有变动, 是否先保存为自定义样式?")
-            yesButton {
-                saveCurrentAsCustomStyle {
-                    showRestoreStyleSelector()
-                }
-            }
-            noButton {
-                showRestoreStyleSelector()
-            }
-            cancelButton()
-        }
-    }
-
-    private fun showRestoreStyleSelector() {
+    private fun showStyleManager() {
         val recyclerView = RecyclerView(requireContext()).apply {
             layoutManager = LinearLayoutManager(requireContext())
             clipToPadding = false
             setPadding(8.dpToPx(), 4.dpToPx(), 8.dpToPx(), 4.dpToPx())
         }
+        val titleView = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(24.dpToPx(), 14.dpToPx(), 24.dpToPx(), 4.dpToPx())
+            addView(TextView(requireContext()).apply {
+                text = "管理样式"
+                textSize = 20f
+                typeface = requireContext().uiTypeface()
+                setTextColor(primaryTextColor)
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            ))
+            addView(TextView(requireContext()).apply {
+                text = getString(R.string.import_str)
+                textSize = 14f
+                typeface = requireContext().uiTypeface()
+                setTextColor(primaryTextColor)
+                setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_import, 0, 0, 0)
+                compoundDrawablePadding = 8.dpToPx()
+                compoundDrawablesRelative.forEach {
+                    it?.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
+                }
+                minHeight = 40.dpToPx()
+                gravity = Gravity.CENTER_VERTICAL
+                background = UiCorner.opaqueRoundedStroke(
+                    Color.TRANSPARENT,
+                    UiCorner.actionRadius(requireContext()),
+                    1.dpToPx(),
+                    ColorUtils.withAlpha(primaryTextColor, 0.45f)
+                )
+                setPadding(12.dpToPx(), 0, 12.dpToPx(), 0)
+                setOnClickListener { launchImportStyle() }
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
         val adapter = RestoreStyleAdapter()
         fun reloadItems() {
-            adapter.setItems(
-                ReadBookConfig.configList.withIndex()
-                    .filter { it.index != ReadBookConfig.styleSelect }
-                    .sortedBy { if (it.index >= DefaultData.readConfigs.size) 0 else 1 }
-            )
+            val items = arrayListOf<IndexedValue<ReadBookConfig.Config>>()
+            if (isUnsavedCurrentStyle()) {
+                items.add(IndexedValue(draftStyleIndex, ReadBookConfig.durConfig.copy()))
+            }
+            items.addAll(ReadBookConfig.allStyleConfigs())
+            adapter.setItems(items)
         }
         recyclerView.adapter = adapter
         reloadItems()
-        val restoreDialog = alert(getString(R.string.restore)) {
+        reloadStyleManager = { reloadItems() }
+        val managerDialog = alert {
+            customTitle { titleView }
             customView { recyclerView }
+            onDismiss {
+                reloadStyleManager = null
+            }
         }
         adapter.onRestore = { index ->
-            restoreDialog.dismiss()
-            restoreStyleToCurrent(index)
+            confirmSwitchStyle(index, managerDialog)
+        }
+        adapter.onSave = {
+            saveCurrentAsCustomStyle {
+                reloadItems()
+            }
+        }
+        adapter.onExport = { index ->
+            if (index == draftStyleIndex) {
+                launchExportStyle(ReadBookConfig.durConfig)
+            } else {
+                launchExportStyle(ReadBookConfig.getConfig(index))
+            }
         }
         adapter.onDelete = { index ->
-            if (ReadBookConfig.deleteAt(index)) {
+            if (index != draftStyleIndex && ReadBookConfig.deleteAt(index)) {
                 ReadBookConfig.clearBgAndCache()
+                savedConfigSnapshot = savedStyleSnapshot()
                 ReadBookConfig.save()
                 reloadItems()
                 upView()
                 postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
                 toastOnUi(getString(R.string.delete_success))
-            } else {
+            } else if (index != draftStyleIndex) {
                 toastOnUi("至少保留一个样式")
             }
         }
     }
-    private fun exportConfig(uri: Uri) {
-        val exportFileName = if (ReadBookConfig.config.name.isBlank()) {
+
+    private fun confirmSwitchStyle(
+        index: Int,
+        managerDialog: androidx.appcompat.app.AlertDialog
+    ) {
+        if (index == draftStyleIndex || !ReadBookConfig.isValidStyleIndex(index)) {
+            return
+        }
+        if (index == ReadBookConfig.styleSelect && !isUnsavedCurrentStyle()) {
+            return
+        }
+        val targetName = styleDisplayName(
+            ReadBookConfig.getConfig(index),
+            isBuiltInStyle(index)
+        )
+        alert("切换样式") {
+            setMessage("是否切换到“$targetName”？")
+            positiveButton(getString(R.string.sure)) {
+                switchStyleAfterUnsavedCheck(index, managerDialog)
+            }
+            cancelButton()
+        }
+    }
+
+    private fun switchStyleAfterUnsavedCheck(
+        index: Int,
+        managerDialog: androidx.appcompat.app.AlertDialog
+    ) {
+        if (!isUnsavedCurrentStyle()) {
+            managerDialog.dismiss()
+            changeBgTextConfig(index)
+            return
+        }
+        alert("保存当前样式?") {
+            setMessage("当前样式有未保存修改，是否保存？")
+            yesButton {
+                saveCurrentStyleByName(
+                    styleDisplayName(ReadBookConfig.durConfig, isBuiltInStyle(ReadBookConfig.styleSelect))
+                ) {
+                    managerDialog.dismiss()
+                    changeBgTextConfig(index)
+                }
+            }
+            noButton {
+                managerDialog.dismiss()
+                changeBgTextConfig(index)
+            }
+            cancelButton()
+        }
+    }
+
+    private fun exportConfig(uri: Uri, targetConfig: ReadBookConfig.Config) {
+        val exportFileName = if (targetConfig.name.isBlank()) {
             configFileName
         } else {
-            "${ReadBookConfig.config.name}.zip"
+            "${targetConfig.name}.zip"
         }
         execute {
             val exportFiles = arrayListOf<File>()
@@ -966,8 +1127,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             configDir.createFolderReplace()
             val configFile = configDir.getFile("readConfig.json")
             configFile.createFileReplace()
-            val config = ReadBookConfig.getExportConfig()
-            val fontPath = ReadBookConfig.textFont
+            val config = targetConfig.copy()
+            val fontPath = config.textFont
             if (fontPath.isNotEmpty()) {
                 val fontDoc = FileDoc.fromFile(fontPath)
                 val fontName = fontDoc.name
@@ -981,7 +1142,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             configFile.writeText(GSON.toJson(config))
             exportFiles.add(configFile)
             repeat(3) {
-                val path = ReadBookConfig.durConfig.getBgPath(it) ?: return@repeat
+                val path = targetConfig.getBgPath(it) ?: return@repeat
                 val bgExportFile = copyBgImage(path, configDir) ?: return@repeat
                 exportFiles.add(bgExportFile)
             }
@@ -1046,12 +1207,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         execute {
             ReadBookConfig.import(uri.readBytes(requireContext()))
         }.onSuccess {
-            ReadBookConfig.durConfig = it
-            savedConfigSnapshot = GSON.toJson(it)
-            upView()
-            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
-            postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-            toastOnUi("导入成功")
+            saveImportedStyle(it)
         }.onError {
             it.printOnDebug()
             longToast("导入失败:${it.localizedMessage}")
@@ -1062,13 +1218,56 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         execute {
             ReadBookConfig.import(byteArray)
         }.onSuccess {
-            ReadBookConfig.durConfig = it
-            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
-            toastOnUi("导入成功")
+            saveImportedStyle(it)
         }.onError {
             it.printOnDebug()
             longToast("导入失败:${it.localizedMessage}")
         }
+    }
+
+    private fun saveImportedStyle(importedConfig: ReadBookConfig.Config) {
+        val baseName = importedConfig.name.trim().ifBlank { "自定义" }
+        val config = importedConfig.copy(name = baseName)
+        val existingIndex = ReadBookConfig.allStyleConfigs()
+            .firstOrNull { styleDisplayName(it.index) == baseName }?.index ?: -1
+        when {
+            existingIndex < 0 -> addImportedStyle(config)
+            isBuiltInStyle(existingIndex) -> {
+                addImportedStyle(config.copy(name = uniqueStyleName(baseName)))
+            }
+            else -> {
+                alert("覆盖样式") {
+                    setMessage("已存在同名样式，是否覆盖？")
+                    positiveButton("覆盖") {
+                        val wasCurrentUnsaved = isUnsavedCurrentStyle()
+                        ReadBookConfig.configList[ReadBookConfig.customIndex(existingIndex)] = config
+                        if (existingIndex == ReadBookConfig.styleSelect) {
+                            savedConfigSnapshot = GSON.toJson(config)
+                            if (!wasCurrentUnsaved) {
+                                ReadBookConfig.setActiveConfig(config.copy(), existingIndex)
+                            }
+                            upView()
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+                            postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
+                        }
+                        ReadBookConfig.save()
+                        reloadStyleManager?.invoke()
+                        toastOnUi("导入成功")
+                    }
+                    negativeButton("不覆盖") {
+                        addImportedStyle(config.copy(name = uniqueStyleName(baseName)))
+                    }
+                    cancelButton()
+                }
+            }
+        }
+    }
+
+    private fun addImportedStyle(config: ReadBookConfig.Config) {
+        ReadBookConfig.configList.add(config)
+        ReadBookConfig.save()
+        reloadStyleManager?.invoke()
+        toastOnUi("导入成功")
     }
 
     private fun setBgFromUri(uri: Uri) {
@@ -1100,6 +1299,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         RecyclerAdapter<IndexedValue<ReadBookConfig.Config>, ItemRestoreReadStyleBinding>(requireContext()) {
 
         var onRestore: ((index: Int) -> Unit)? = null
+        var onSave: (() -> Unit)? = null
+        var onExport: ((index: Int) -> Unit)? = null
         var onDelete: ((index: Int) -> Unit)? = null
 
         override fun getViewBinding(parent: ViewGroup): ItemRestoreReadStyleBinding {
@@ -1114,18 +1315,31 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         ) {
             val config = item.value
             binding.apply {
-                val isBuiltIn = item.index < DefaultData.readConfigs.size
-                val styleName = config.name.ifBlank {
-                    if (isBuiltIn) "文字" else "自定义"
+                val isDraft = item.index == draftStyleIndex
+                val isBuiltIn = !isDraft && isBuiltInStyle(item.index)
+                val isUnsaved = isDraft
+                val isCurrent = isDraft || (item.index == ReadBookConfig.styleSelect && !isUnsavedCurrentStyle())
+                val styleName = styleDisplayName(config, isBuiltIn)
+                root.background = if (isCurrent) {
+                    UiCorner.opaqueRounded(
+                        ColorUtils.withAlpha(accentColor, 0.16f),
+                        UiCorner.actionRadius(requireContext())
+                    )
+                } else {
+                    ColorDrawable(Color.TRANSPARENT)
                 }
-                tvStyleName.text = styleName
-                tvStyleName.setTextColor(primaryTextColor)
+                tvStyleName.text = if (isUnsaved) "$styleName(未保存)" else styleName
+                tvStyleName.setTextColor(if (isCurrent) accentColor else primaryTextColor)
                 tvStyleName.typeface = requireContext().uiTypeface()
                 ivStylePreview.setText("")
                 ivStylePreview.setImageDrawable(config.curBgDrawable(72, 72))
-                ivStylePreview.borderColor = config.curTextColor()
-                ivDelete.visibility = if (isBuiltIn) View.INVISIBLE else View.VISIBLE
-                ivDelete.isEnabled = !isBuiltIn
+                ivStylePreview.borderColor = if (isCurrent) accentColor else config.curTextColor()
+                ivSave.visibility = if (isDraft) View.VISIBLE else View.GONE
+                ivSave.isEnabled = isDraft
+                ivSave.setColorFilter(secondaryTextColor, PorterDuff.Mode.SRC_IN)
+                ivExport.setColorFilter(secondaryTextColor, PorterDuff.Mode.SRC_IN)
+                ivDelete.visibility = if (isBuiltIn || isDraft) View.INVISIBLE else View.VISIBLE
+                ivDelete.isEnabled = !isBuiltIn && !isDraft
                 ivDelete.setColorFilter(secondaryTextColor, PorterDuff.Mode.SRC_IN)
             }
         }
@@ -1139,9 +1353,17 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
                     onRestore?.invoke(it.index)
                 }
             }
+            binding.ivSave.setOnClickListener {
+                onSave?.invoke()
+            }
+            binding.ivExport.setOnClickListener {
+                getItem(holder.layoutPosition - getHeaderCount())?.let { stl ->
+                    onExport?.invoke(stl.index)
+                }
+            }
             binding.ivDelete.setOnClickListener {
                 getItem(holder.layoutPosition - getHeaderCount())?.let { stl ->
-                    if (stl.index < DefaultData.readConfigs.size) {
+                    if (stl.index == draftStyleIndex || isBuiltInStyle(stl.index)) {
                         return@let
                     }
                     alert(getString(R.string.delete)) {
