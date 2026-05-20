@@ -268,13 +268,17 @@
         <!--目录按钮-->
         <LinearLayout
             android:id="@+id/ll_catalog"
-            android:layout_width="60dp"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:clickable="true"
-            android:contentDescription="@string/chapter_list"
+            android:contentDescription="@string/speak_engine"
             android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="54dp"
             android:orientation="vertical"
+            android:paddingEnd="12dp"
             android:paddingBottom="7dp">
 
             <androidx.appcompat.widget.AppCompatImageView
@@ -291,21 +295,21 @@
 
             <TextView
                 android:id="@+id/tv_catalog"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
+                android:layout_gravity="center_vertical"
                 android:layout_marginTop="3dp"
-                android:ellipsize="middle"
-                android:singleLine="true"
-                android:text="@string/chapter_list"
+                android:gravity="center_vertical"
+                android:maxLines="4"
+                android:text="@string/speak_engine"
                 android:textColor="@color/primaryText"
                 android:textSize="12sp" />
         </LinearLayout>
 
         <View
-            android:layout_width="0dp"
+            android:layout_width="8dp"
             android:layout_height="match_parent"
-            android:layout_weight="2" />
+            android:layout_weight="0" />
         <!--调节按钮-->
         <LinearLayout
             android:id="@+id/ll_main_menu"
@@ -317,6 +321,7 @@
             android:focusable="true"
             android:orientation="vertical"
             android:paddingBottom="7dp"
+            android:visibility="gone"
             tools:ignore="TextSizeCheck">
 
             <androidx.appcompat.widget.AppCompatImageView
@@ -345,9 +350,9 @@
         </LinearLayout>
 
         <View
-            android:layout_width="0dp"
+            android:layout_width="8dp"
             android:layout_height="match_parent"
-            android:layout_weight="2" />
+            android:layout_weight="0" />
         <!--界面按钮-->
         <LinearLayout
             android:id="@+id/ll_to_backstage"
@@ -386,9 +391,9 @@
         </LinearLayout>
 
         <View
-            android:layout_width="0dp"
+            android:layout_width="8dp"
             android:layout_height="match_parent"
-            android:layout_weight="2" />
+            android:layout_weight="0" />
         <!--设置按钮-->
         <LinearLayout
             android:id="@+id/ll_setting"

@@ -74,6 +74,7 @@ object ReadBook : CoroutineScope by MainScope() {
     var durChapterPos = 0
     var isLocalBook = true
     var chapterChanged = false
+    var skipReadAloudSyncOnce = false
     var prevTextChapter: TextChapter? = null
     var curTextChapter: TextChapter? = null
     var nextTextChapter: TextChapter? = null
@@ -501,11 +502,15 @@ object ReadBook : CoroutineScope by MainScope() {
         callBack?.pageChanged()
         curTextChapter?.let {
             if (BaseReadAloudService.isRun && it.isCompleted) {
-                val scrollPageAnim = pageAnim() == 3
-                if (scrollPageAnim && pageChanged) {
-                    ReadAloud.pause(appCtx)
+                if (skipReadAloudSyncOnce) {
+                    skipReadAloudSyncOnce = false
                 } else {
-                    readAloud(!BaseReadAloudService.pause)
+                    val scrollPageAnim = pageAnim() == 3
+                    if (scrollPageAnim && pageChanged) {
+                        ReadAloud.pause(appCtx)
+                    } else {
+                        readAloud(!BaseReadAloudService.pause)
+                    }
                 }
             }
         }

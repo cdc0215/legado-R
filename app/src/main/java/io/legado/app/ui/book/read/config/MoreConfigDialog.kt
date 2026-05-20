@@ -51,6 +51,10 @@ class MoreConfigDialog : BasePrefDialogFragment() {
                 520.dpToPx()
             ).coerceAtLeast(360.dpToPx())
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, sheetHeight)
+            (activity as? ReadBookActivity)?.postReadAloudFloatingAvoidanceForView(
+                EventBus.FLOATING_AVOID_SOURCE_MORE_CONFIG_DIALOG,
+                view
+            )
         }
     }
 
@@ -81,6 +85,9 @@ class MoreConfigDialog : BasePrefDialogFragment() {
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         (activity as ReadBookActivity).bottomDialog--
+        (activity as? ReadBookActivity)?.clearReadAloudFloatingAvoidance(
+            EventBus.FLOATING_AVOID_SOURCE_MORE_CONFIG_DIALOG
+        )
     }
 
     class ReadPreferenceFragment : PreferenceFragment(),

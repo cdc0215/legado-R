@@ -162,6 +162,11 @@
     <string name="set_timer">定时</string>
     <string name="read_aloud_pause">朗读暂停</string>
     <string name="read_aloud_timer">正在朗读（还剩 %d 分钟）</string>
+    <string name="read_aloud_backstage_confirm_title">是否后台继续听书？</string>
+    <string name="read_aloud_backstage_confirm_msg">朗读仍在运行。可以继续后台听书，也可以停止朗读后退出；只有开启“悬浮到桌面”后，悬浮控制才会在 App 外显示。</string>
+    <string name="current_tts_engine_summary">当前引擎\n%1$s</string>
+    <string name="read_aloud_float_on_desktop">悬浮到桌面</string>
+    <string name="read_aloud_float_on_desktop_summary">在本 App 外显示朗读控制悬浮窗，需要悬浮窗权限；关闭时仅在阅读页内悬浮。</string>
     <string name="playing_timer">正在播放（还剩 %d 分钟）</string>
     <string name="ps_hide_navigation_bar">阅读界面隐藏虚拟按键</string>
     <string name="pt_hide_navigation_bar">隐藏导航栏</string>

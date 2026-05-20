@@ -11,6 +11,8 @@ import android.widget.SeekBar
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
+import io.legado.app.data.appDb
+import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.databinding.DialogReadAloudBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.selector
@@ -27,7 +29,8 @@ import io.legado.app.utils.*
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 
-class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
+class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
+    SpeakEngineDialog.CallBack {
     private val callBack: CallBack? get() = activity as? CallBack
     private val binding by viewBinding(DialogReadAloudBinding::bind)
 
@@ -42,12 +45,19 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             attr.gravity = Gravity.BOTTOM
             attributes = attr
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            (activity as? ReadBookActivity)?.postReadAloudFloatingAvoidanceForView(
+                EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_DIALOG,
+                binding.rootView
+            )
         }
     }
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         (activity as ReadBookActivity).bottomDialog--
+        (activity as? ReadBookActivity)?.clearReadAloudFloatingAvoidance(
+            EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_DIALOG
+        )
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -95,6 +105,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
 
     private fun initData() = binding.run {
         upPlayState()
+        upSpeakEngineSummary()
         upTimerText(BaseReadAloudService.timeMinute)
         cbTtsFollowSys.isChecked = requireContext().getPrefBoolean("ttsFollowSys", true)
         upTtsSpeechRateEnabled(!cbTtsFollowSys.isChecked)
@@ -102,9 +113,10 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
     }
 
     private fun initEvent() = binding.run {
-        llMainMenu.setOnClickListener {
-            callBack?.showMenuBar()
-            dismissAllowingStateLoss()
+        ivCatalog.gone()
+        llMainMenu.gone()
+        llCatalog.setOnClickListener {
+            SpeakEngineDialog().show(childFragmentManager, "speakEngineDialog")
         }
         llSetting.setOnClickListener {
             ReadAloudConfigDialog().show(childFragmentManager, "readAloudConfigDialog")
@@ -118,8 +130,10 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
         ivPlayPause.setOnClickListener { callBack?.onClickReadAloud() }
         ivPlayPrev.setOnClickListener { ReadAloud.prevParagraph(requireContext()) }
         ivPlayNext.setOnClickListener { ReadAloud.nextParagraph(requireContext()) }
-        llCatalog.setOnClickListener { callBack?.openChapterList() }
-        llToBackstage.setOnClickListener { callBack?.finish() }
+        llToBackstage.setOnClickListener {
+            (activity as? ReadBookActivity)?.toReadAloudBackstage()
+            dismissAllowingStateLoss()
+        }
         cbTtsFollowSys.setOnCheckedChangeListener { _, isChecked ->
             AppConfig.ttsFlowSys = isChecked
             upTtsSpeechRateEnabled(!isChecked)
@@ -169,6 +183,23 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
                 ReadAloud.setTimer(requireContext(), seekTimer.progress)
             }
         })
+    }
+
+    override fun upSpeakEngineSummary() {
+        binding.tvCatalog.text = getString(
+            R.string.current_tts_engine_summary,
+            speakEngineSummary()
+        )
+    }
+
+    private fun speakEngineSummary(): String {
+        val ttsEngine = ReadAloud.ttsEngine ?: return getString(R.string.system_tts)
+        if (StringUtils.isNumeric(ttsEngine)) {
+            return appDb.httpTTSDao.getName(ttsEngine.toLong())
+                ?: getString(R.string.system_tts)
+        }
+        return GSON.fromJsonObject<SelectItem<String>>(ttsEngine).getOrNull()?.title
+            ?: getString(R.string.system_tts)
     }
 
     private fun upTtsSpeechRateEnabled(enabled: Boolean) {
@@ -226,12 +257,13 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
     override fun observeLiveBus() {
         observeEvent<Int>(EventBus.ALOUD_STATE) { upPlayState() }
         observeEvent<Int>(EventBus.READ_ALOUD_DS) { binding.seekTimer.progress = it }
+        observeEvent<Boolean>(EventBus.CLOSE_READ_ALOUD_DIALOG) {
+            dismissAllowingStateLoss()
+        }
     }
 
     interface CallBack {
         fun showMenuBar()
-        fun openChapterList()
         fun onClickReadAloud()
-        fun finish()
     }
 }

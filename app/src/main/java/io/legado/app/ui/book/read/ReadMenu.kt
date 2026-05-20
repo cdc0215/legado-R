@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.database.ContentObserver
 import android.graphics.PorterDuff
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.Settings
@@ -125,6 +126,7 @@ class ReadMenu @JvmOverloads constructor(
         @SuppressLint("RtlHardcoded")
         override fun onAnimationEnd(animation: Animation) {
             binding.vwMenuBg.setOnClickListener { runMenuOut() }
+            callBack.onReadMenuAvoidanceChanged(true)
             callBack.upSystemUiVisibility()
             if (!LocalConfig.readMenuHelpVersionIsLast) {
                 callBack.showHelp()
@@ -146,6 +148,7 @@ class ReadMenu @JvmOverloads constructor(
             canShowMenu = false
             isMenuOutAnimating = false
             onMenuOutEnd?.invoke()
+            callBack.onReadMenuAvoidanceChanged(false)
             callBack.upSystemUiVisibility()
         }
 
@@ -312,6 +315,15 @@ class ReadMenu @JvmOverloads constructor(
     fun refreshMenuColorFilter() {
         if (immersiveMenu) {
             binding.titleBar.setColorFilter(textColor)
+        }
+    }
+
+    fun bottomMenuTopOnScreen(): Int? {
+        val rect = Rect()
+        return if (binding.bottomMenu.getGlobalVisibleRect(rect) && rect.height() > 0) {
+            rect.top
+        } else {
+            null
         }
     }
 
@@ -814,6 +826,7 @@ class ReadMenu @JvmOverloads constructor(
         fun skipToChapter(index: Int)
         fun onMenuShow()
         fun onMenuHide()
+        fun onReadMenuAvoidanceChanged(show: Boolean)
     }
 
 }

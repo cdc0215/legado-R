@@ -144,6 +144,10 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             attr.gravity = Gravity.BOTTOM
             attributes = attr
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            (activity as? ReadBookActivity)?.postReadAloudFloatingAvoidanceForView(
+                EventBus.FLOATING_AVOID_SOURCE_READ_STYLE_DIALOG,
+                binding.rootView
+            )
         }
     }
 
@@ -158,6 +162,9 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         super.onDismiss(dialog)
         ReadBookConfig.save()
         (activity as ReadBookActivity).bottomDialog--
+        (activity as? ReadBookActivity)?.clearReadAloudFloatingAvoidance(
+            EventBus.FLOATING_AVOID_SOURCE_READ_STYLE_DIALOG
+        )
     }
 
     override fun onResume() {

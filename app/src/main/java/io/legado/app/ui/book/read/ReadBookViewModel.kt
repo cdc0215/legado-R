@@ -103,9 +103,19 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             }
             val index = intent.getIntExtra("index", -1)
             val chapterPos = intent.getIntExtra("chapterPos", -1)
+            val fromReadAloudFloating = intent.getBooleanExtra("fromReadAloudFloating", false)
             if (index >= 0 && chapterPos >= 0) { //从书签打开的正文，有进度传递
-                ReadBook.saveCurrentBookProgress() //启用恢复进度提示
-                openChapter(index, chapterPos)
+                if (!fromReadAloudFloating) {
+                    ReadBook.saveCurrentBookProgress()
+                } else {
+                    ReadBook.lastBookProgress = null
+                }
+                ReadBook.skipReadAloudSyncOnce = BaseReadAloudService.isRun
+                openChapter(index, chapterPos) {
+                    if (BaseReadAloudService.isPlay()) {
+                        postEvent(EventBus.TTS_PROGRESS, chapterPos)
+                    }
+                }
             }
         }.onSuccess {
             success?.invoke()

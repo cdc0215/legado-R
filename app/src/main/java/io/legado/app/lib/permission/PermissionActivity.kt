@@ -16,6 +16,8 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.lib.dialogs.setUiTitle
+import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
+import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.utils.registerForActivityResult
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
@@ -240,6 +242,12 @@ class PermissionActivity : AppCompatActivity() {
                 finish()
             }
             .show()
+            .also { dialog ->
+                val typeface = uiTypeface()
+                dialog.window?.decorView?.applyUiBodyTypefaceDeep(typeface)
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.typeface = typeface
+                dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.typeface = typeface
+            }
     }
 
     private fun incrementDenyCount(permission: String): Int {
