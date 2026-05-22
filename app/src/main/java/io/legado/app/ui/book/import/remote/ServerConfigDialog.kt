@@ -15,7 +15,7 @@ import io.legado.app.databinding.DialogWebdavServerBinding
 import io.legado.app.databinding.ItemSourceEditBinding
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import org.json.JSONObject
@@ -46,7 +46,7 @@ class ServerConfigDialog() : BaseDialogFragment(R.layout.dialog_webdav_server, t
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
         binding.toolBar.inflateMenu(R.menu.server_config)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
         viewModel.init(arguments?.getLong("id")) {
             upConfigView(viewModel.mServer)

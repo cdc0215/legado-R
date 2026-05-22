@@ -13,7 +13,6 @@ import android.view.LayoutInflater
 import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import android.view.animation.Animation
 import android.widget.FrameLayout
-import android.widget.PopupWindow
 import android.widget.SeekBar
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -37,7 +36,6 @@ import io.legado.app.model.SourceCallBack
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.book.read.config.ReaderSheetStyle
 import io.legado.app.ui.browser.WebViewActivity
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.uiTypeface
@@ -54,6 +52,7 @@ import io.legado.app.utils.isDataUrl
 import io.legado.app.utils.loadAnimation
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import splitties.views.onClick
@@ -107,7 +106,6 @@ class ReadMenu @JvmOverloads constructor(
             PreferKey.showBrightnessView,
             true
         )
-    private var modernMenuPopup: PopupWindow? = null
     private var currentChapterUrl: String? = null
     private val menuInListener = object : Animation.AnimationListener {
         override fun onAnimationStart(animation: Animation) {
@@ -549,10 +547,8 @@ class ReadMenu @JvmOverloads constructor(
         }
         //书源操作
         tvSourceAction.onClick {
-            modernMenuPopup = ModernActionPopup.showFromMenu(
-                tvSourceAction,
+            tvSourceAction.showPopupMenu(
                 R.menu.book_read_source,
-                modernMenuPopup,
                 prepare = {
                     findItem(R.id.menu_login).isVisible =
                         !ReadBook.bookSource?.loginUrl.isNullOrEmpty()

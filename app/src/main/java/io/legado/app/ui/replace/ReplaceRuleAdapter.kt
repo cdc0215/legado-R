@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.core.os.bundleOf
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -13,9 +12,9 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.databinding.ItemReplaceRuleBinding
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import io.legado.app.utils.showPopupMenu
 
 
 class ReplaceRuleAdapter(context: Context, var callBack: CallBack) :
@@ -23,7 +22,6 @@ class ReplaceRuleAdapter(context: Context, var callBack: CallBack) :
     ItemTouchCallback.Callback {
 
     private val selected = linkedSetOf<ReplaceRule>()
-    private var modernMenuPopup: PopupWindow? = null
 
     val selection: List<ReplaceRule>
         get() {
@@ -153,10 +151,8 @@ class ReplaceRuleAdapter(context: Context, var callBack: CallBack) :
 
     private fun showMenu(view: View, position: Int) {
         val item = getItem(position) ?: return
-        modernMenuPopup = ModernActionPopup.showFromMenu(
-            view,
+        view.showPopupMenu(
             R.menu.replace_rule_item,
-            modernMenuPopup
         ) { menuItem ->
             when (menuItem.itemId) {
                 R.id.menu_top -> callBack.toTop(item)

@@ -14,7 +14,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.databinding.DialogOpenUrlConfirmBinding
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -63,7 +63,7 @@ class OpenUrlConfirmDialog() : BaseDialogFragment(R.layout.dialog_open_url_confi
     private fun initMenu() {
         binding.toolBar.setOnMenuItemClickListener(this)
         binding.toolBar.inflateMenu(R.menu.open_url_confirm)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
     }
 
     private fun initView() {

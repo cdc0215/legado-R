@@ -968,7 +968,6 @@ object ReadBook : CoroutineScope by MainScope() {
         if (!book.canUpdate) return
         if (chapterSize - durChapterIndex - 1 >= 3) return
         if (System.currentTimeMillis() - book.lastCheckTime < 600000) return
-        book.lastCheckTime = System.currentTimeMillis()
         val oldBook = book.copy()
         WebBook.getChapterList(this, bookSource, book).onSuccess(IO) { cList ->
             ensureActive()

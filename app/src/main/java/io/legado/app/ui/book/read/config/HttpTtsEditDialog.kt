@@ -25,7 +25,7 @@ import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.ui.widget.code.addJsonPattern
 import io.legado.app.ui.widget.code.addLegadoPattern
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
@@ -85,7 +85,7 @@ class HttpTtsEditDialog() : BaseDialogFragment(R.layout.dialog_http_tts_edit, tr
 
     fun initMenu() {
         binding.toolBar.inflateMenu(R.menu.speak_engine_edit)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
     }
 

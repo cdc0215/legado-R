@@ -8,6 +8,7 @@
 
     <dimen name="font_size_normal">14sp</dimen>
     <dimen name="font_size_middle">16sp</dimen>
+    <dimen name="menu_text_size">16sp</dimen>
     <dimen name="font_size_large">18sp</dimen>
 
     <dimen name="fast_scroll_min_thumb_height">24dp</dimen>

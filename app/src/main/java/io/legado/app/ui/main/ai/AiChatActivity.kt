@@ -8,7 +8,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
 import android.widget.TextView
-import android.widget.PopupWindow
 import android.view.inputmethod.EditorInfo
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
@@ -31,13 +30,14 @@ import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.utils.PopupMenuAction
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.text.SimpleDateFormat
@@ -59,7 +59,6 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
     }
     private val composerBaseBottomMargin by lazy { 0 }
     private var modelActionText: TextView? = null
-    private var modernMenuPopup: PopupWindow? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initView()
@@ -96,20 +95,18 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             }
 
             R.id.menu_ai_more -> {
-                modernMenuPopup = ModernActionPopup.show(
-                    binding.titleBar,
+                binding.titleBar.showPopupMenu(
                     listOf(
-                        ModernActionPopup.Action(getString(R.string.ai_new_chat)) {
+                        PopupMenuAction(getString(R.string.ai_new_chat)) {
                             startNewChatFromMenu()
                         },
-                        ModernActionPopup.Action(getString(R.string.ai_chat_history)) {
+                        PopupMenuAction(getString(R.string.ai_chat_history)) {
                             openHistoryFromMenu()
                         },
-                        ModernActionPopup.Action(getString(R.string.ai_setting)) {
+                        PopupMenuAction(getString(R.string.ai_setting)) {
                             openAiSettings()
                         }
-                    ),
-                    modernMenuPopup
+                    )
                 )
                 return true
             }

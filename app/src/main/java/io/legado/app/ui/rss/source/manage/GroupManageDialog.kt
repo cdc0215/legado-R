@@ -23,7 +23,7 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.requestInputMethod
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -48,7 +48,7 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
         toolBar.setBackgroundColor(primaryColor)
         toolBar.title = getString(R.string.group_manage)
         toolBar.inflateMenu(R.menu.group_manage)
-        toolBar.menu.applyTint(requireContext())
+        toolBar.menu.applyUiMenuStyle(requireContext())
         toolBar.setOnMenuItemClickListener(this@GroupManageDialog)
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.addItemDecoration(VerticalDivider(requireContext()))

@@ -9,7 +9,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
-import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -45,13 +44,12 @@ import io.legado.app.service.ExportBookService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.font.FontSelectDialog
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
@@ -59,6 +57,7 @@ import io.legado.app.utils.iconItemOnLongClick
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setIconCompat
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startService
 import io.legado.app.utils.verificationField
@@ -92,7 +91,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     private val adapter by lazy { CacheAdapter(this, this) }
     private var booksFlowJob: Job? = null
     private var menu: Menu? = null
-    private var modernMenuPopup: PopupWindow? = null
     private val groupList: ArrayList<BookGroup> = arrayListOf()
     private var groupId: Long = -1
     private var pendingExportConfig: ExportConfig? = null
@@ -206,10 +204,8 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.book_cache, menu)
         menu.iconItemOnLongClick(R.id.menu_download) {
-            modernMenuPopup = ModernActionPopup.showFromMenu(
-                it,
+            it.showPopupMenu(
                 R.menu.book_cache_download,
-                modernMenuPopup,
                 onClick = ::onMenuItemClick
             )
         }
@@ -355,13 +351,13 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                     item.setIconCompat(R.drawable.ic_play_24dp)
                     item.setTitle(R.string.download_start)
                 }
-                menu?.applyTint(this)
+                menu?.applyUiMenuStyle(this)
             } else {
                 menu?.findItem(R.id.menu_download)?.let { item ->
                     item.setIconCompat(R.drawable.ic_stop_black_24dp)
                     item.setTitle(R.string.stop)
                 }
-                menu?.applyTint(this)
+                menu?.applyUiMenuStyle(this)
             }
         }
         observeEvent<Pair<Book, BookChapter>>(EventBus.SAVE_CONTENT) { (book, chapter) ->

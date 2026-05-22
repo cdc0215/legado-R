@@ -47,7 +47,7 @@ class DictRuleEditDialog() : BaseDialogFragment(R.layout.dialog_dict_rule_edit, 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
         binding.toolBar.inflateMenu(R.menu.dict_rule_edit)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
         viewModel.initData(arguments?.getString("name")) {
             upRuleView(viewModel.dictRule)

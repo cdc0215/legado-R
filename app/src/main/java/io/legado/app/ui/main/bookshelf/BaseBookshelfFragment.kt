@@ -4,10 +4,7 @@ import android.annotation.SuppressLint
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.widget.PopupWindow
-import androidx.appcompat.widget.ActionMenuView
-import androidx.appcompat.widget.Toolbar
-import androidx.core.view.children
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.indices
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -24,7 +21,7 @@ import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.cache.CacheActivity
 import io.legado.app.ui.book.group.GroupManageDialog
@@ -35,7 +32,6 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.checkByIndex
 import io.legado.app.utils.getCheckedIndex
@@ -93,7 +89,6 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             }
         }
     }
-    private var modernMenuPopup: PopupWindow? = null
 
     abstract fun gotoTop()
 
@@ -111,32 +106,19 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         supportToolbar?.menu?.let { menu ->
             menu.clear()
             onCompatCreateOptionsMenu(menu)
-            menu.applyTint(requireContext())
+            menu.applyUiMenuStyle(requireContext())
         }
     }
 
-    protected fun installModernBookshelfOverflow(toolbar: Toolbar) {
-        toolbar.post {
-            toolbar.children
-                .filterIsInstance<ActionMenuView>()
-                .firstOrNull()
-                ?.children
-                ?.forEach { itemView ->
-                    itemView.setOnClickListener {
-                        showModernBookshelfMenu(itemView)
-                    }
-                }
-        }
-    }
-
-    protected fun showModernBookshelfMenu(anchor: View) {
-        modernMenuPopup = ModernActionPopup.showFromMenu(
-            anchor,
-            R.menu.main_bookshelf,
-            modernMenuPopup
-        ) {
-            onCompatOptionsItemSelected(it)
-            true
+    protected fun showBookshelfMenu(anchor: View) {
+        PopupMenu(requireContext(), anchor).apply {
+            inflate(R.menu.main_bookshelf)
+            menu.applyUiMenuStyle(requireContext())
+            setOnMenuItemClickListener {
+                onCompatOptionsItemSelected(it)
+                true
+            }
+            show()
         }
     }
 

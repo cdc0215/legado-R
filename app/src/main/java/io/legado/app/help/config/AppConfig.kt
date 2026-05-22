@@ -1464,6 +1464,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val readAloudFloatOnDesktop
         get() = appCtx.getPrefBoolean(PreferKey.readAloudFloatOnDesktop, false)
 
+    val readAloudHideFloatingWindow
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudHideFloatingWindow, false)
+
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
 
     val webDavDir get() = appCtx.getPrefString(PreferKey.webDavDir, "legado")

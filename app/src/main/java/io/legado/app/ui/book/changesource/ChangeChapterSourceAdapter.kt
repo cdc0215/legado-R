@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
@@ -14,10 +13,10 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ItemChangeSourceBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.visible
 import splitties.init.appCtx
 import splitties.views.onLongClick
@@ -28,8 +27,6 @@ class ChangeChapterSourceAdapter(
     val viewModel: ChangeChapterSourceViewModel,
     val callBack: CallBack
 ) : DiffRecyclerAdapter<SearchBook, ItemChangeSourceBinding>(context) {
-
-    private var modernMenuPopup: PopupWindow? = null
 
     override val diffItemCallback = object : DiffUtil.ItemCallback<SearchBook>() {
         override fun areItemsTheSame(oldItem: SearchBook, newItem: SearchBook): Boolean {
@@ -168,10 +165,8 @@ class ChangeChapterSourceAdapter(
 
     private fun showMenu(view: View, searchBook: SearchBook?) {
         searchBook ?: return
-        modernMenuPopup = ModernActionPopup.showFromMenu(
-            view,
+        view.showPopupMenu(
             R.menu.change_source_item,
-            modernMenuPopup
         ) {
             when (it.itemId) {
                 R.id.menu_top_source -> {

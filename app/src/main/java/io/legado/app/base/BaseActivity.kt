@@ -29,8 +29,9 @@ import io.legado.app.lib.theme.applyUiBodyTypeface
 import io.legado.app.lib.theme.applyUiMenuTypefaceDeep
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.applyMenuScrollIndicators
 import io.legado.app.utils.applyOpenTint
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.disableAutoFill
 import io.legado.app.utils.fullScreen
 import io.legado.app.utils.hideSoftInput
@@ -83,6 +84,7 @@ abstract class BaseActivity<VB : ViewBinding>(
             val menuView = view ?: parent
             menuView?.post {
                 menuView.applyUiMenuTypefaceDeep(context)
+                menuView.applyMenuScrollIndicators()
             }
         }
         return view
@@ -147,7 +149,13 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     final override fun onCreateOptionsMenu(menu: Menu): Boolean {
         val bool = onCompatCreateOptionsMenu(menu)
-        menu.applyTint(this, toolBarTheme)
+        menu.applyUiMenuStyle(this, toolBarTheme)
+        return bool
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val bool = super.onPrepareOptionsMenu(menu)
+        menu.applyUiMenuStyle(this, toolBarTheme)
         return bool
     }
 

@@ -593,20 +593,8 @@ class ExportBookService : BaseService() {
     private fun setAssets(book: Book, epubBook: EpubBook, applyExportStyle: Boolean): String {
         epubBook.resources.add(
             Resource(
-                appCtx.assets.open("epub/fonts.css").use { it.readBytes() },
-                "Styles/fonts.css"
-            )
-        )
-        epubBook.resources.add(
-            Resource(
                 appCtx.assets.open("epub/main.css").use { it.readBytes() },
                 "Styles/main.css"
-            )
-        )
-        epubBook.resources.add(
-            Resource(
-                appCtx.assets.open("epub/logo.png").use { it.readBytes() },
-                "Images/logo.png"
             )
         )
         epubBook.addSection(
@@ -751,26 +739,48 @@ class ExportBookService : BaseService() {
                 $backgroundImage
             }
 
+            html, body {
+                color: $textColor;
+            }
+
             body, div {
                 color: $textColor;
-                font-family: ${fontFamily}"DK-SONGTI", "st", "宋体", "zw", sans-serif;
+                font-family: ${fontFamily}"Songti SC", "Songti TC", "宋体", serif;
                 font-size: ${textSize}px;
                 line-height: $lineHeight%;
             }
 
             p {
                 color: $textColor;
-                font-family: ${fontFamily}"DK-SONGTI", "st", "宋体", "zw", sans-serif;
+                font-family: ${fontFamily}"Songti SC", "Songti TC", "宋体", serif;
                 font-size: ${textSize}px;
                 line-height: $lineHeight%;
                 margin-top: 0;
                 margin-bottom: ${paragraphSpacing}px;
                 text-indent: $paragraphIndent;
+                duokan-text-indent: $paragraphIndent;
             }
 
-            h1, h2, h3, h4, h2.head {
+            h1, h2, h3, h4, h1.head, h2.head {
                 color: $titleColor;
-                font-family: ${fontFamily}"DK-HEITI", "黑体", sans-serif;
+                font-family: ${fontFamily}"Heiti SC", "Heiti TC", "黑体", sans-serif;
+                background: transparent;
+                border: 0;
+                text-indent: 0;
+                duokan-text-indent: 0;
+            }
+
+            h1.head, h2.head {
+                color: $titleColor;
+                text-align: center;
+                margin: 1em 0 1em 0;
+            }
+
+            h2.head span {
+                color: inherit;
+                background: transparent;
+                border-radius: 0;
+                padding: 0;
             }
         """.trimIndent()
     }

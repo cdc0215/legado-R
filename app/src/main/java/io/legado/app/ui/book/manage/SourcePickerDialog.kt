@@ -25,6 +25,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -101,7 +102,7 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
     private fun initMenu() {
         toolBar.setOnMenuItemClickListener(this)
         toolBar.inflateMenu(R.menu.source_picker)
-        toolBar.menu.applyTint(requireContext())
+        toolBar.menu.applyUiMenuStyle(requireContext())
     }
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {

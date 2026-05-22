@@ -128,6 +128,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 appDb.bookSourceDao.getBookSource(book.origin)?.also {
                     hasCustomBtn = it.customButton
                 }
+            syncBookSourceName(book)
             bookData.postValue(book)
             upCoverByRule(book)
             if (book.tocUrl.isEmpty() && !book.isLocal) {
@@ -176,9 +177,8 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     }
                 }
             } else {
-                val bs = bookSource ?: return@executeLazy
-                if (book.originName != bs.bookSourceName) {
-                    book.originName = bs.bookSourceName
+                if (syncBookSourceName(book)) {
+                    bookData.postValue(book)
                 }
             }
         }.onError {
@@ -194,6 +194,17 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }.onFinally {
             loadBookInfo(book, false)
         }.start()
+    }
+
+    private fun syncBookSourceName(book: Book): Boolean {
+        if (book.isLocal) return false
+        val sourceName = bookSource?.bookSourceName ?: return false
+        if (book.originName == sourceName) return false
+        book.originName = sourceName
+        if (inBookshelf) {
+            appDb.bookDao.update(book)
+        }
+        return true
     }
 
     fun loadBookInfo(

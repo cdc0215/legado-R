@@ -174,6 +174,11 @@ abstract class BaseReadAloudService : BaseService(),
         override fun onActivityStarted(activity: Activity) = Unit
         override fun onActivityResumed(activity: Activity) {
             appFloatingActivity = activity
+            if (AppConfig.readAloudHideFloatingWindow) {
+                removeReadAloudFloatingWindow()
+                upReadAloudNotification()
+                return
+            }
             if (AppConfig.readAloudFloatOnDesktop && canDrawFloatingWindow()) {
                 if (!isDesktopFloating) {
                     removeAppReadAloudFloatingWindow()
@@ -213,7 +218,8 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun canDrawFloatingWindow(): Boolean {
-        return AppConfig.readAloudFloatOnDesktop &&
+        return !AppConfig.readAloudHideFloatingWindow &&
+                AppConfig.readAloudFloatOnDesktop &&
                 (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
     }
 
@@ -223,6 +229,11 @@ abstract class BaseReadAloudService : BaseService(),
             lifecycleScope.launch(Main) {
                 showReadAloudFloatingWindow()
             }
+            return
+        }
+        if (AppConfig.readAloudHideFloatingWindow) {
+            removeReadAloudFloatingWindow()
+            upReadAloudNotification()
             return
         }
         if (floatingView != null) {
@@ -672,6 +683,11 @@ abstract class BaseReadAloudService : BaseService(),
                 PreferKey.readAloudFloatOnDesktop -> {
                     rebuildReadAloudFloatingWindow()
                     postEvent(PreferKey.readAloudFloatOnDesktop, "")
+                }
+                PreferKey.readAloudHideFloatingWindow -> {
+                    rebuildReadAloudFloatingWindow()
+                    upReadAloudNotification()
+                    postEvent(PreferKey.readAloudHideFloatingWindow, "")
                 }
             }
         }

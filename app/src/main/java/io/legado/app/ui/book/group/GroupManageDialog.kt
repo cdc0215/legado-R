@@ -25,7 +25,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
@@ -89,7 +89,7 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     private fun initMenu() {
         binding.toolBar.setOnMenuItemClickListener(this)
         binding.toolBar.inflateMenu(R.menu.book_group_manage)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
     }
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {

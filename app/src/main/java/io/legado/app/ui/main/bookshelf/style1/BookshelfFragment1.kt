@@ -5,7 +5,6 @@ package io.legado.app.ui.main.bookshelf.style1
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -24,12 +23,13 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
 import io.legado.app.ui.widget.ExpandableTagSelector
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.RoundedTagBarView
+import io.legado.app.utils.PopupMenuAction
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.isCreated
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -47,7 +47,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private val primaryGroups = mutableListOf<BookGroup>()
     private val secondaryGroups = mutableListOf<BookGroup>()
     private val fragmentMap = hashMapOf<Long, BooksFragment>()
-    private var groupMenuPopup: PopupWindow? = null
     private var secondaryGroupIds = emptyList<Long>()
     private var selectedSecondaryGroupId = 0L
     private val groupBooksCache = hashMapOf<Long, List<Book>>()
@@ -72,7 +71,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.root.applyStatusBarPadding()
         binding.viewPagerBookshelf.setEdgeEffectColor(primaryColor)
         binding.btnMore.setOnClickListener {
-            showModernBookshelfMenu(it)
+            showBookshelfMenu(it)
         }
         updateSearchButtonVisibility()
         binding.btnSearch.setOnClickListener {
@@ -265,11 +264,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         val selectedId = selectedPrimaryGroup?.groupId
         val actions = primaryGroups.mapIndexed { index, group ->
             val prefix = if (group.groupId == selectedId) "✓" else ""
-            ModernActionPopup.Action(prefix + group.groupName) {
+            PopupMenuAction(prefix + group.groupName) {
                 switchToPrimaryGroup(index)
             }
         }
-        groupMenuPopup = ModernActionPopup.show(anchor, actions, groupMenuPopup)
+        anchor.showPopupMenu(actions)
     }
 
     private fun switchToPrimaryGroup(index: Int) {

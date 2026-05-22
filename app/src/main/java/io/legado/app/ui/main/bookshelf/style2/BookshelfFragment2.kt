@@ -80,7 +80,6 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         setSupportToolbar(binding.titleBar.toolbar)
-        installModernBookshelfOverflow(binding.titleBar.toolbar)
         initRecyclerView()
         initBookGroupData()
         initBooksData()

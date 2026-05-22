@@ -38,7 +38,7 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
@@ -169,7 +169,7 @@ class ThemeConfigFragment : PreferenceFragment(),
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
         menuInflater.inflate(R.menu.theme_config, menu)
-        menu.applyTint(requireContext())
+        menu.applyUiMenuStyle(requireContext())
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {

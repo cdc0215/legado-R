@@ -20,7 +20,7 @@ import io.legado.app.databinding.ItemRadioButtonBinding
 import io.legado.app.lib.theme.applyUiBodyTypeface
 import io.legado.app.lib.theme.applyUiSearchTypeface
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -62,7 +62,7 @@ class SearchScopeDialog : BaseDialogFragment(R.layout.dialog_search_scope) {
 
     private fun initMenu() {
         binding.toolBar.inflateMenu(R.menu.book_search_scope)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
     }
 
     private fun initSearchView() {

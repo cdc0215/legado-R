@@ -9,7 +9,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.widget.FrameLayout
 import android.widget.PopupMenu
-import android.widget.PopupWindow
 import androidx.annotation.MenuRes
 import androidx.annotation.StringRes
 import io.legado.app.R
@@ -21,6 +20,8 @@ import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.lib.theme.getSecondaryDisabledTextColor
 import io.legado.app.lib.theme.transparentNavBar
+import io.legado.app.utils.applyUiMenuStyle
+import io.legado.app.utils.applyUiMenuTitleSize
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.visible
@@ -38,7 +39,6 @@ class SelectActionBar @JvmOverloads constructor(
 
     private var callBack: CallBack? = null
     private var selMenu: Menu? = null
-    private var modernMenuPopup: PopupWindow? = null
     private var menuItemClickListener: MenuItem.OnMenuItemClickListener? = null
     private val binding = ViewSelectActionBarBinding
         .inflate(LayoutInflater.from(context), this, true)
@@ -62,11 +62,7 @@ class SelectActionBar @JvmOverloads constructor(
             binding.btnSelectActionMain.setOnClickListener { callBack?.onClickSelectBarMainAction() }
             binding.ivMenuMore.setOnClickListener {
                 val menu = selMenu ?: return@setOnClickListener
-                modernMenuPopup = ModernActionPopup.show(
-                    binding.ivMenuMore,
-                    menu.visibleActions(),
-                    modernMenuPopup
-                )
+                showSelectionMenu(menu)
             }
             applyNavigationBarPadding()
         }
@@ -86,6 +82,7 @@ class SelectActionBar @JvmOverloads constructor(
         val popupMenu = PopupMenu(context, binding.ivMenuMore)
         popupMenu.inflate(resId)
         selMenu = popupMenu.menu
+        selMenu?.applyUiMenuTitleSize(context)
         binding.ivMenuMore.visible()
         return selMenu
     }
@@ -98,19 +95,25 @@ class SelectActionBar @JvmOverloads constructor(
         menuItemClickListener = listener
     }
 
-    private fun Menu.visibleActions(): List<ModernActionPopup.Action> {
-        val actions = mutableListOf<ModernActionPopup.Action>()
-        for (index in 0 until size()) {
-            val item = getItem(index)
-            if (item.isVisible) {
-                actions.add(
-                    ModernActionPopup.Action(item.title.toString()) {
-                        menuItemClickListener?.onMenuItemClick(item)
-                    }
-                )
+    private fun showSelectionMenu(menu: Menu) {
+        PopupMenu(context, binding.ivMenuMore).apply {
+            val itemMap = hashMapOf<Int, MenuItem>()
+            for (index in 0 until menu.size()) {
+                val item = menu.getItem(index)
+                if (item.isVisible) {
+                    itemMap[item.itemId] = item
+                    this.menu.add(Menu.NONE, item.itemId, index, item.title).icon = item.icon
+                }
             }
+            this.menu.applyUiMenuStyle(context)
+            setOnMenuItemClickListener { item ->
+                itemMap[item.itemId]?.let {
+                    menuItemClickListener?.onMenuItemClick(it)
+                }
+                true
+            }
+            show()
         }
-        return actions
     }
 
     fun upCountView(selectCount: Int, allCount: Int) = binding.run {

@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.core.os.bundleOf
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -13,16 +12,15 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.databinding.ItemTxtTocRuleBinding
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import io.legado.app.utils.showPopupMenu
 
 class TxtTocRuleAdapter(context: Context, private val callBack: CallBack) :
     RecyclerAdapter<TxtTocRule, ItemTxtTocRuleBinding>(context),
     ItemTouchCallback.Callback {
 
     private val selected = linkedSetOf<TxtTocRule>()
-    private var modernMenuPopup: PopupWindow? = null
 
     val selection: List<TxtTocRule>
         get() = getItems().filter {
@@ -131,10 +129,8 @@ class TxtTocRuleAdapter(context: Context, private val callBack: CallBack) :
 
     private fun showMenu(view: View, position: Int) {
         val source = getItem(position) ?: return
-        modernMenuPopup = ModernActionPopup.showFromMenu(
-            view,
+        view.showPopupMenu(
             R.menu.txt_toc_rule_item,
-            modernMenuPopup
         ) { menuItem ->
             when (menuItem.itemId) {
                 R.id.menu_top -> callBack.toTop(source)

@@ -13,7 +13,7 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.databinding.DialogChangeCoverBinding
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.delay
@@ -59,7 +59,7 @@ class ChangeCoverDialog() : BaseDialogFragment(R.layout.dialog_change_cover),
 
     private fun initMenu() {
         binding.toolBar.inflateMenu(R.menu.change_cover)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
     }
 
@@ -102,7 +102,7 @@ class ChangeCoverDialog() : BaseDialogFragment(R.layout.dialog_change_cover),
                     }
                 }
             }
-            binding.toolBar.menu.applyTint(requireContext())
+            binding.toolBar.menu.applyUiMenuStyle(requireContext())
         }
 
     }

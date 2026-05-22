@@ -17,7 +17,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.applyUiBodyTypeface
 import io.legado.app.ui.widget.TitleBar
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 
 @Suppress("MemberVisibilityCanBePrivate")
 abstract class BaseFragment(@LayoutRes layoutID: Int) : Fragment(layoutID) {
@@ -69,7 +69,7 @@ abstract class BaseFragment(@LayoutRes layoutID: Int) : Fragment(layoutID) {
         supportToolbar?.let {
             it.menu.apply {
                 onCompatCreateOptionsMenu(this)
-                applyTint(requireContext())
+                applyUiMenuStyle(requireContext())
             }
 
             it.setOnMenuItemClickListener { item ->

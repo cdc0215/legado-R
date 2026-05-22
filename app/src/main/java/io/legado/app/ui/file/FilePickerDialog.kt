@@ -33,7 +33,7 @@ import io.legado.app.ui.file.utils.FilePickerIcon
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ConvertUtils
 import io.legado.app.utils.FileUtils
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
@@ -99,7 +99,7 @@ class FilePickerDialog : BaseDialogFragment(R.layout.dialog_file_chooser),
 
     private fun initMenu() {
         binding.toolBar.inflateMenu(R.menu.file_chooser)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
     }
 

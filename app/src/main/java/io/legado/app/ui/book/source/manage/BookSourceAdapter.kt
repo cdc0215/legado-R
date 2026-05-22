@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.PopupWindow
 import androidx.core.os.bundleOf
 import androidx.core.view.doOnLayout
 import androidx.recyclerview.widget.DiffUtil
@@ -18,12 +17,13 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.ItemBookSourceBinding
 import io.legado.app.model.Debug
 import io.legado.app.ui.login.SourceLoginActivity
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import io.legado.app.utils.PopupMenuAction
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import java.util.Collections
@@ -39,7 +39,6 @@ class BookSourceAdapter(
     private val selected = linkedSetOf<BookSourcePart>()
     private val finalMessageRegex = Regex("成功|失败")
     private val handler = buildMainHandler()
-    private var modernMenuPopup: PopupWindow? = null
     var showSourceHost = false
 
     val selection: List<BookSourcePart>
@@ -164,20 +163,20 @@ class BookSourceAdapter(
         val source = getItem(position) ?: return
         val actions = buildList {
             if (callBack.sort == BookSourceSort.Default) {
-                add(ModernActionPopup.Action(context.getString(R.string.to_top)) { callBack.toTop(source) })
-                add(ModernActionPopup.Action(context.getString(R.string.to_bottom)) { callBack.toBottom(source) })
+                add(PopupMenuAction(context.getString(R.string.to_top)) { callBack.toTop(source) })
+                add(PopupMenuAction(context.getString(R.string.to_bottom)) { callBack.toBottom(source) })
             }
             if (source.hasLoginUrl) {
-                add(ModernActionPopup.Action(context.getString(R.string.login)) {
+                add(PopupMenuAction(context.getString(R.string.login)) {
                     context.startActivity<SourceLoginActivity> {
                         putExtra("type", "bookSource")
                         putExtra("key", source.bookSourceUrl)
                     }
                 })
             }
-            add(ModernActionPopup.Action(context.getString(R.string.search)) { callBack.searchBook(source) })
-            add(ModernActionPopup.Action(context.getString(R.string.debug)) { callBack.debug(source) })
-            add(ModernActionPopup.Action(context.getString(R.string.delete)) {
+            add(PopupMenuAction(context.getString(R.string.search)) { callBack.searchBook(source) })
+            add(PopupMenuAction(context.getString(R.string.debug)) { callBack.debug(source) })
+            add(PopupMenuAction(context.getString(R.string.delete)) {
                 callBack.del(source)
                 selected.remove(source)
             })
@@ -187,10 +186,10 @@ class BookSourceAdapter(
                 } else {
                     context.getString(R.string.enable_explore)
                 }
-                add(ModernActionPopup.Action(title) { callBack.enableExplore(!source.enabledExplore, source) })
+                add(PopupMenuAction(title) { callBack.enableExplore(!source.enabledExplore, source) })
             }
         }
-        modernMenuPopup = ModernActionPopup.show(view, actions, modernMenuPopup)
+        view.showPopupMenu(actions)
     }
 
     private fun upShowExplore(iv: ImageView, source: BookSourcePart) {

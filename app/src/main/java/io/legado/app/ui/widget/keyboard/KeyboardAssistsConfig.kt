@@ -31,7 +31,7 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.setLayout
@@ -92,7 +92,7 @@ class KeyboardAssistsConfig(private val callBack: CallBack) : BaseDialogFragment
     private fun initMenu() {
         binding.toolBar.setOnMenuItemClickListener(this)
         binding.toolBar.inflateMenu(R.menu.keyboard_assists_config)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
     }
 
     private fun initData() {

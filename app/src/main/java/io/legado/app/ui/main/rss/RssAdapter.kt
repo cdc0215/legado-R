@@ -3,7 +3,6 @@ package io.legado.app.ui.main.rss
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import com.bumptech.glide.request.RequestOptions
@@ -14,7 +13,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ItemRssBinding
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
-import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.utils.showPopupMenu
 import splitties.views.onLongClick
 
 class RssAdapter(
@@ -23,8 +22,6 @@ class RssAdapter(
     private val callBack: CallBack,
     private val lifecycle: Lifecycle
 ) : RecyclerAdapter<RssSource, ItemRssBinding>(context) {
-
-    private var modernMenuPopup: PopupWindow? = null
 
     override fun getViewBinding(parent: ViewGroup): ItemRssBinding {
         return ItemRssBinding.inflate(inflater, parent, false)
@@ -65,10 +62,8 @@ class RssAdapter(
     }
 
     private fun showMenu(view: View, rssSource: RssSource) {
-        modernMenuPopup = ModernActionPopup.showFromMenu(
-            view,
+        view.showPopupMenu(
             R.menu.rss_main_item,
-            modernMenuPopup,
             prepare = {
                 findItem(R.id.menu_login).isVisible = !rssSource.loginUrl.isNullOrBlank()
             }

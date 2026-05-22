@@ -33,7 +33,7 @@ import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.setLayout
@@ -86,7 +86,7 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
         durRegex = arguments?.getString("tocRegex")
         binding.toolBar.setTitle(R.string.txt_toc_rule)
         binding.toolBar.inflateMenu(R.menu.txt_toc_rule)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
         initView()
         initData()

@@ -39,7 +39,7 @@ import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatDrawable
 import io.legado.app.utils.observeEvent
@@ -131,7 +131,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
 
     private fun initMenu() {
         binding.toolBar.inflateMenu(R.menu.change_source)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         binding.toolBar.setOnMenuItemClickListener(this)
         binding.toolBar.menu.findItem(R.id.menu_check_author)
             ?.isChecked = AppConfig.changeSourceCheckAuthor
@@ -232,7 +232,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                     item.setTitle(R.string.refresh)
                 }
             }
-            binding.toolBar.menu.applyTint(requireContext())
+            binding.toolBar.menu.applyUiMenuStyle(requireContext())
         }
         lifecycleScope.launch {
             lifecycle.currentStateFlow.first { it.isAtLeast(STARTED) }

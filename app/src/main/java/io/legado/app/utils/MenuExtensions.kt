@@ -4,10 +4,20 @@ package io.legado.app.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.MetricAffectingSpan
+import android.text.style.AbsoluteSizeSpan
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.ImageButton
+import android.widget.ListView
+import androidx.annotation.DrawableRes
+import androidx.annotation.MenuRes
+import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.appcompat.view.menu.SubMenuBuilder
@@ -15,7 +25,126 @@ import androidx.core.view.forEach
 import io.legado.app.R
 import io.legado.app.constant.Theme
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.uiTypeface
 import java.lang.reflect.Method
+
+data class PopupMenuAction(
+    val title: CharSequence,
+    @param:DrawableRes val iconRes: Int? = null,
+    val onClick: () -> Unit
+)
+
+fun View.showPopupMenu(
+    actions: List<PopupMenuAction>
+): Boolean {
+    if (actions.isEmpty()) return false
+    PopupMenu(context, this).apply {
+        actions.forEachIndexed { index, action ->
+            menu.add(Menu.NONE, index, index, action.title).apply {
+                action.iconRes?.let(::setIcon)
+            }
+        }
+        menu.applyUiMenuStyle(context)
+        setOnMenuItemClickListener { item ->
+            actions.getOrNull(item.itemId)?.onClick?.invoke()
+            true
+        }
+        show()
+        showScrollIndicators()
+    }
+    return true
+}
+
+fun View.showPopupMenu(
+    @MenuRes menuRes: Int,
+    prepare: (Menu.() -> Unit)? = null,
+    onClick: (MenuItem) -> Boolean
+): Boolean {
+    PopupMenu(context, this).apply {
+        inflate(menuRes)
+        prepare?.invoke(menu)
+        menu.applyUiMenuStyle(context)
+        setOnMenuItemClickListener(onClick)
+        show()
+        showScrollIndicators()
+    }
+    return true
+}
+
+fun Menu.applyUiMenuStyle(context: Context, theme: Theme = Theme.Auto): Menu {
+    applyUiMenuTitleSize(context)
+    return applyTint(context, theme)
+}
+
+fun Menu.applyUiMenuTitleSize(context: Context? = null) {
+    val textSize = context?.resources?.getDimensionPixelSize(R.dimen.menu_text_size) ?: 16
+    val dip = context == null
+    val typeface = context?.uiTypeface()
+    for (index in 0 until size()) {
+        val item = getItem(index)
+        item.title = item.title.toUiMenuTitle(textSize, dip, typeface)
+        item.subMenu?.applyUiMenuTitleSize(context)
+    }
+}
+
+private fun CharSequence?.toUiMenuTitle(
+    textSize: Int,
+    dip: Boolean,
+    typeface: Typeface?
+): CharSequence? {
+    val title = this?.toString() ?: return null
+    if (title.isEmpty()) return this
+    return SpannableString(title).apply {
+        setSpan(AbsoluteSizeSpan(textSize, dip), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        typeface?.let {
+            setSpan(MenuTypefaceSpan(it), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+}
+
+private class MenuTypefaceSpan(
+    private val typeface: Typeface
+) : MetricAffectingSpan() {
+
+    override fun updateDrawState(textPaint: TextPaint) {
+        textPaint.typeface = typeface
+    }
+
+    override fun updateMeasureState(textPaint: TextPaint) {
+        textPaint.typeface = typeface
+    }
+}
+
+private fun PopupMenu.showScrollIndicators() {
+    runCatching {
+        val popupField = PopupMenu::class.java.getDeclaredField("mPopup")
+        popupField.isAccessible = true
+        val popup = popupField.get(this)
+        val getPopup = popup.javaClass.getDeclaredMethod("getPopup")
+        getPopup.isAccessible = true
+        val listPopupWindow = getPopup.invoke(popup)
+        val listView = listPopupWindow.javaClass.getMethod("getListView")
+            .invoke(listPopupWindow) as? ListView
+        listView?.apply {
+            applyMenuScrollIndicators()
+        }
+    }
+}
+
+fun View.applyMenuScrollIndicators() {
+    when (this) {
+        is ListView -> {
+            isVerticalScrollBarEnabled = true
+            isScrollbarFadingEnabled = false
+            isVerticalFadingEdgeEnabled = true
+        }
+        is android.view.ViewGroup -> {
+            for (index in 0 until childCount) {
+                getChildAt(index).applyMenuScrollIndicators()
+            }
+        }
+    }
+}
 
 @SuppressLint("RestrictedApi")
 @Suppress("UsePropertyAccessSyntax")
@@ -26,12 +155,11 @@ fun Menu.applyTint(context: Context, theme: Theme = Theme.Auto): Menu = this.let
     val defaultTextColor = context.getCompatColor(R.color.primaryText)
     val tintColor = MenuExtensions.getMenuColor(context, theme)
     menu.forEach { item ->
-        (item as MenuItemImpl).let { impl ->
-            //overflow：展开的item
-            impl.icon?.setTintMutate(
-                if (impl.requiresOverflow()) defaultTextColor else tintColor
-            )
-        }
+        val requiresOverflow = (item as? MenuItemImpl)?.requiresOverflow() ?: true
+        // overflow：展开的item
+        item.icon?.setTintMutate(
+            if (requiresOverflow) defaultTextColor else tintColor
+        )
     }
     return menu
 }

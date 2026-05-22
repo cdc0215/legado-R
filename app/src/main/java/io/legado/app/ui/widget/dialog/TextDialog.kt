@@ -14,7 +14,7 @@ import io.legado.app.help.CacheManager
 import io.legado.app.help.IntentData
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.setHtml
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.setMarkdown
@@ -66,7 +66,7 @@ class TextDialog() : BaseDialogFragment(R.layout.dialog_text_view) {
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
         binding.toolBar.inflateMenu(R.menu.dialog_text)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
         arguments?.let {
             val title = it.getString("title")
             binding.toolBar.title = title

@@ -12,7 +12,6 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.LinearLayout
-import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatSpinner
@@ -42,16 +41,17 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.login.SourceLoginJsExtensions
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.ui.widget.text.AccentTextView
 import io.legado.app.utils.InfoMap
+import io.legado.app.utils.PopupMenuAction
 import io.legado.app.utils.activity
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
 import io.legado.app.utils.removeLastElement
 import io.legado.app.utils.setSelectionSafely
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import kotlinx.coroutines.CoroutineScope
@@ -71,7 +71,6 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
     companion object {
         val exploreInfoMapList = LruCache<String, InfoMap>(99)
     }
-    private var modernMenuPopup: PopupWindow? = null
     private val recycler = arrayListOf<TextView>()
     private val textRecycler = arrayListOf<AutoCompleteTextView>()
     private val selectRecycler = arrayListOf<LinearLayout>()
@@ -661,31 +660,31 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
     private fun showMenu(binding: ItemFindBookBinding, position: Int): Boolean {
         val source = getItem(position) ?: return true
         val actions = buildList {
-            add(ModernActionPopup.Action(context.getString(R.string.edit)) {
+            add(PopupMenuAction(context.getString(R.string.edit)) {
                 callBack.editSource(source.bookSourceUrl)
             })
-            add(ModernActionPopup.Action(context.getString(R.string.to_top)) {
+            add(PopupMenuAction(context.getString(R.string.to_top)) {
                 callBack.toTop(source)
             })
             if (source.hasLoginUrl) {
-                add(ModernActionPopup.Action(context.getString(R.string.login)) {
+                add(PopupMenuAction(context.getString(R.string.login)) {
                     context.startActivity<SourceLoginActivity> {
                         putExtra("type", "bookSource")
                         putExtra("key", source.bookSourceUrl)
                     }
                 })
             }
-            add(ModernActionPopup.Action(context.getString(R.string.search)) {
+            add(PopupMenuAction(context.getString(R.string.search)) {
                 callBack.searchBook(source)
             })
-            add(ModernActionPopup.Action(context.getString(R.string.refresh)) {
+            add(PopupMenuAction(context.getString(R.string.refresh)) {
                 refreshExplore(source, position, binding)
             })
-            add(ModernActionPopup.Action(context.getString(R.string.delete)) {
+            add(PopupMenuAction(context.getString(R.string.delete)) {
                 callBack.deleteSource(source)
             })
         }
-        modernMenuPopup = ModernActionPopup.show(binding.llTitle, actions, modernMenuPopup)
+        binding.llTitle.showPopupMenu(actions)
         return true
     }
 

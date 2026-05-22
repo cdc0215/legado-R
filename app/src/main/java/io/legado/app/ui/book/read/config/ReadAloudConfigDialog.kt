@@ -90,6 +90,7 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
             upSpeakEngineSummary()
             initPhoneCallPausePreference()
             initFloatOnDesktopPreference()
+            upFloatOnDesktopPreference()
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -132,6 +133,11 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                     postEvent(PreferKey.readAloudFloatOnDesktop, "")
                 }
 
+                PreferKey.readAloudHideFloatingWindow -> {
+                    upFloatOnDesktopPreference()
+                    postEvent(PreferKey.readAloudHideFloatingWindow, "")
+                }
+
                 PreferKey.ignoreAudioFocus -> {
                     Unit
                 }
@@ -147,6 +153,11 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                     }
                     true
                 }
+        }
+
+        private fun upFloatOnDesktopPreference() {
+            findPreference<SwitchPreference>(PreferKey.readAloudFloatOnDesktop)?.isEnabled =
+                !AppConfig.readAloudHideFloatingWindow
         }
 
         private fun initPhoneCallPausePreference() {

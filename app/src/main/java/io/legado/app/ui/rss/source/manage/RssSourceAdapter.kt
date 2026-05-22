@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupWindow
 import androidx.core.os.bundleOf
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -13,9 +12,9 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ItemRssSourceBinding
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import io.legado.app.utils.showPopupMenu
 import java.util.Collections
 
 
@@ -24,7 +23,6 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
     ItemTouchCallback.Callback {
 
     private val selected = linkedSetOf<RssSource>()
-    private var modernMenuPopup: PopupWindow? = null
 
     val selection: List<RssSource>
         get() {
@@ -166,10 +164,8 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
 
     private fun showMenu(view: View, position: Int) {
         val source = getItem(position) ?: return
-        modernMenuPopup = ModernActionPopup.showFromMenu(
-            view,
+        view.showPopupMenu(
             R.menu.rss_source_item,
-            modernMenuPopup
         ) { menuItem ->
             when (menuItem.itemId) {
                 R.id.menu_top -> callBack.toTop(source)

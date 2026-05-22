@@ -28,7 +28,7 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.widget.RowUiForm
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.isAbsUrl
@@ -417,7 +417,7 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
         binding.toolBar.title = getString(R.string.login_source, source.getTag())
         binding.toolBar.applyUiToolbarTypeface(requireContext())
         binding.toolBar.inflateMenu(R.menu.source_login)
-        binding.toolBar.menu.applyTint(requireContext())
+        binding.toolBar.menu.applyUiMenuStyle(requireContext())
     }
 
     private fun MotionEvent.isInsideRoundedPanel(panel: View): Boolean {

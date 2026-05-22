@@ -35,7 +35,7 @@ import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.applyUiMenuStyle
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.gone
 import io.legado.app.utils.isAbsUrl
@@ -175,7 +175,7 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
 
     private fun initMenu() = binding.run {
         toolBar.inflateMenu(R.menu.speak_engine)
-        toolBar.menu.applyTint(requireContext())
+        toolBar.menu.applyUiMenuStyle(requireContext())
         toolBar.setOnMenuItemClickListener(this@SpeakEngineDialog)
     }
 

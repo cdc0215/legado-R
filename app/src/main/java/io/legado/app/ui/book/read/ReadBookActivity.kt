@@ -15,7 +15,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
-import android.widget.PopupWindow
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -109,7 +108,6 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.utils.ACache
@@ -133,6 +131,7 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.showPopupMenu
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
@@ -222,7 +221,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             } else {
                 ReadBook.loadOrUpContent()
             }
-        }
+    }
     private var lastTextMenuAnchor: ReadAiFloatingPanel.Anchor? = null
     private val selectImageDir = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
@@ -231,7 +230,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
     private var menu: Menu? = null
-    private var modernMenuPopup: PopupWindow? = null
     private var backupJob: Job? = null
     private var tts: TTS? = null
     val textActionMenu: TextActionMenu by lazy {
@@ -427,18 +425,14 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.book_read, menu)
         menu.iconItemOnLongClick(R.id.menu_change_source) {
-            modernMenuPopup = ModernActionPopup.showFromMenu(
-                it,
+            it.showPopupMenu(
                 R.menu.book_read_change_source,
-                modernMenuPopup,
                 onClick = ::onMenuItemClick
             )
         }
         menu.iconItemOnLongClick(R.id.menu_refresh) {
-            modernMenuPopup = ModernActionPopup.showFromMenu(
-                it,
+            it.showPopupMenu(
                 R.menu.book_read_refresh,
-                modernMenuPopup,
                 onClick = ::onMenuItemClick
             )
         }
