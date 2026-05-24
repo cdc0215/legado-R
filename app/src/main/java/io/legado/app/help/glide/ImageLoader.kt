@@ -15,69 +15,100 @@ import io.legado.app.utils.isDataUrl
 import io.legado.app.utils.lifecycle
 import java.io.File
 import androidx.core.net.toUri
+import io.legado.app.utils.externalFiles
+import io.legado.app.utils.getFile
+import splitties.init.appCtx
 
 //https://bumptech.github.io/glide/doc/generatedapi.html
 //Instead of GlideApp, use com.bumptech.Glide
 @Suppress("unused")
 object ImageLoader {
 
+    private fun normalizeLocalPath(path: String?): String? {
+        if (path.isNullOrEmpty() ||
+            path.isDataUrl() ||
+            path.isAbsUrl() ||
+            path.isContentScheme() ||
+            !path.contains(File.separator)
+        ) {
+            return path
+        }
+        if (File(path).exists()) {
+            return path
+        }
+        val fileName = File(path).name.takeIf { it.isNotBlank() } ?: return null
+        val localDir = when {
+            path.contains("${File.separator}covers${File.separator}") -> "covers"
+            path.contains("${File.separator}bg${File.separator}") -> "bg"
+            path.contains("${File.separator}font${File.separator}") -> "font"
+            else -> return null
+        }
+        return appCtx.externalFiles.getFile(localDir, fileName)
+            .takeIf { it.exists() }
+            ?.absolutePath
+    }
+
     /**
      * 自动判断path类型
      */
     fun load(context: Context, path: String?): RequestBuilder<Drawable> {
+        val normalizedPath = normalizeLocalPath(path)
         return when {
-            path.isNullOrEmpty() -> Glide.with(context).load(path)
-            path.isDataUrl() -> Glide.with(context).load(path)
-            path.isAbsUrl() -> Glide.with(context).load(path)
-            path.isContentScheme() -> Glide.with(context).load(path.toUri())
+            normalizedPath.isNullOrEmpty() -> Glide.with(context).load(normalizedPath)
+            normalizedPath.isDataUrl() -> Glide.with(context).load(normalizedPath)
+            normalizedPath.isAbsUrl() -> Glide.with(context).load(normalizedPath)
+            normalizedPath.isContentScheme() -> Glide.with(context).load(normalizedPath.toUri())
             else -> kotlin.runCatching {
-                Glide.with(context).load(File(path))
+                Glide.with(context).load(File(normalizedPath))
             }.getOrElse {
-                Glide.with(context).load(path)
+                Glide.with(context).load(normalizedPath)
             }
         }
     }
 
     fun load(fragment: Fragment, lifecycle: Lifecycle, path: String?): RequestBuilder<Drawable> {
+        val normalizedPath = normalizeLocalPath(path)
         val requestManager = Glide.with(fragment).lifecycle(lifecycle)
         return when {
-            path.isNullOrEmpty() -> requestManager.load(path)
-            path.isDataUrl() -> requestManager.load(path)
-            path.isAbsUrl() -> requestManager.load(path)
-            path.isContentScheme() -> requestManager.load(path.toUri())
+            normalizedPath.isNullOrEmpty() -> requestManager.load(normalizedPath)
+            normalizedPath.isDataUrl() -> requestManager.load(normalizedPath)
+            normalizedPath.isAbsUrl() -> requestManager.load(normalizedPath)
+            normalizedPath.isContentScheme() -> requestManager.load(normalizedPath.toUri())
 
             else -> kotlin.runCatching {
-                requestManager.load(File(path))
+                requestManager.load(File(normalizedPath))
             }.getOrElse {
-                requestManager.load(path)
+                requestManager.load(normalizedPath)
             }
         }
     }
 
     fun loadBitmap(context: Context, path: String?): RequestBuilder<Bitmap> {
+        val normalizedPath = normalizeLocalPath(path)
         val requestManager = Glide.with(context).`as`(Bitmap::class.java)
         return when {
-            path.isNullOrEmpty() -> requestManager.load(path)
-            path.isDataUrl() -> requestManager.load(path)
-            path.isAbsUrl() -> requestManager.load(path)
-            path.isContentScheme() -> requestManager.load(path.toUri())
+            normalizedPath.isNullOrEmpty() -> requestManager.load(normalizedPath)
+            normalizedPath.isDataUrl() -> requestManager.load(normalizedPath)
+            normalizedPath.isAbsUrl() -> requestManager.load(normalizedPath)
+            normalizedPath.isContentScheme() -> requestManager.load(normalizedPath.toUri())
             else -> kotlin.runCatching {
-                requestManager.load(File(path))
+                requestManager.load(File(normalizedPath))
             }.getOrElse {
-                requestManager.load(path)
+                requestManager.load(normalizedPath)
             }
         }
     }
 
     fun loadFile(context: Context, path: String?): RequestBuilder<File> {
+        val normalizedPath = normalizeLocalPath(path)
         return when {
-            path.isNullOrEmpty() -> Glide.with(context).asFile().load(path)
-            path.isAbsUrl() -> Glide.with(context).asFile().load(path)
-            path.isContentScheme() -> Glide.with(context).asFile().load(path.toUri())
+            normalizedPath.isNullOrEmpty() -> Glide.with(context).asFile().load(normalizedPath)
+            normalizedPath.isAbsUrl() -> Glide.with(context).asFile().load(normalizedPath)
+            normalizedPath.isContentScheme() -> Glide.with(context).asFile().load(normalizedPath.toUri())
             else -> kotlin.runCatching {
-                Glide.with(context).asFile().load(File(path))
+                Glide.with(context).asFile().load(File(normalizedPath))
             }.getOrElse {
-                Glide.with(context).asFile().load(path)
+                Glide.with(context).asFile().load(normalizedPath)
             }
         }
     }

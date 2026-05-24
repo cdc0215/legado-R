@@ -48,11 +48,14 @@ object ReadBookConfig {
     lateinit var shareConfig: Config
     private var activeConfig: Config? = null
     private var needSaveConfigList = false
+    private var needSaveSanitizedConfig = false
     var durConfig
-        get() = activeConfig ?: getConfig(styleSelect).copy().also {
+        get() = activeConfig?.also { it.sanitize() } ?: getConfig(styleSelect).copy().also {
+            it.sanitize()
             activeConfig = it
         }
         set(value) {
+            value.sanitize()
             activeConfig = value
             if (shareLayout) {
                 shareConfig = value
@@ -85,7 +88,11 @@ object ReadBookConfig {
         return if (isBuiltInStyleIndex(normalizedIndex)) {
             DefaultData.readConfigs[normalizedIndex]
         } else {
-            configList[customIndex(normalizedIndex)]
+            configList[customIndex(normalizedIndex)].also { config ->
+                if (config.sanitize()) {
+                    needSaveSanitizedConfig = true
+                }
+            }
         }
     }
 
@@ -167,10 +174,45 @@ object ReadBookConfig {
             }
         }
         shareConfig = c ?: getConfig(5).copy()
-        if (needSaveConfigList) {
+        if (shareConfig.sanitize()) {
+            needSaveSanitizedConfig = true
+        }
+        if (needSaveConfigList || needSaveSanitizedConfig) {
             needSaveConfigList = false
+            needSaveSanitizedConfig = false
             save()
         }
+    }
+
+    fun repairConfigIfNeeded(): Boolean {
+        var changed = false
+        configList.forEach { config ->
+            if (config.sanitize()) {
+                changed = true
+            }
+        }
+        if (this::shareConfig.isInitialized && shareConfig.sanitize()) {
+            changed = true
+        }
+        activeConfig?.let { config ->
+            if (config.sanitize()) {
+                changed = true
+            }
+        }
+        val normalizedReadStyle = normalizeStyleIndex(readStyleSelect)
+        if (readStyleSelect != normalizedReadStyle) {
+            readStyleSelect = normalizedReadStyle
+            changed = true
+        }
+        val normalizedComicStyle = normalizeStyleIndex(comicStyleSelect)
+        if (comicStyleSelect != normalizedComicStyle) {
+            comicStyleSelect = normalizedComicStyle
+            changed = true
+        }
+        if (changed) {
+            save()
+        }
+        return changed
     }
 
     private fun normalizeCustomConfigs(configs: List<Config>?): List<Config> {
@@ -236,6 +278,9 @@ object ReadBookConfig {
     }
 
     fun upBg(width: Int, height: Int) {
+        if (durConfig.sanitize()) {
+            save()
+        }
         val drawable = durConfig.curBgDrawable(width, height)
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             bgMeanColor = drawable.bitmap.getMeanColor()
@@ -312,13 +357,14 @@ object ReadBookConfig {
     }
 
     fun resetActiveConfig() {
-        activeConfig = getConfig(styleSelect).copy()
+        activeConfig = getConfig(styleSelect).copy().also { it.sanitize() }
         if (shareLayout) {
             shareConfig = activeConfig ?: shareConfig
         }
     }
 
     fun setActiveConfig(config: Config, selectedIndex: Int = styleSelect) {
+        config.sanitize()
         styleSelect = selectedIndex
         activeConfig = config
         if (shareLayout) {
@@ -687,8 +733,6 @@ object ReadBookConfig {
                 }
             }
             config.bgStr = bgPath
-        } else if (config.bgType == 0) {
-            config.bgStr.toColorInt()
         }
         if (config.bgTypeNight == 2) {
             val bgName = FileUtils.getName(config.bgStrNight)
@@ -701,8 +745,6 @@ object ReadBookConfig {
                 }
             }
             config.bgStrNight = bgPath
-        } else if (config.bgTypeNight == 0) {
-            config.bgStrNight.toColorInt()
         }
         if (config.bgTypeEInk == 2) {
             val bgName = FileUtils.getName(config.bgStrEInk)
@@ -715,11 +757,10 @@ object ReadBookConfig {
                 }
             }
             config.bgStrEInk = bgPath
-        } else if (config.bgTypeEInk == 0) {
-            config.bgStrEInk.toColorInt()
         }
         config.curTextColor()
         config.curTextAccentColor()
+        config.sanitize()
         return config
     }
 
@@ -790,6 +831,115 @@ object ReadBookConfig {
         var headerMode: Int = 0,
         var footerMode: Int = 0
     ) {
+
+        fun sanitize(): Boolean {
+            var changed = false
+
+            fun updateInt(current: Int, value: Int, setValue: (Int) -> Unit) {
+                if (current != value) {
+                    setValue(value)
+                    changed = true
+                }
+            }
+
+            fun updateFloat(current: Float, value: Float, setValue: (Float) -> Unit) {
+                if (current != value) {
+                    setValue(value)
+                    changed = true
+                }
+            }
+
+            fun normalizeBgPath(
+                bgType: Int,
+                bgStr: String,
+                defaultBg: String,
+                setType: (Int) -> Unit,
+                setValue: (String) -> Unit
+            ) {
+                if (bgType != 2) {
+                    return
+                }
+                val localPath = FileUtils.getPath(appCtx.externalFiles, "bg", FileUtils.getName(bgStr))
+                val normalizedPath = when {
+                    FileUtils.exist(localPath) -> localPath
+                    !bgStr.contains(File.separator) && FileUtils.exist(bgStr) -> bgStr
+                    else -> null
+                }
+                if (normalizedPath == null) {
+                    setType(0)
+                    setValue(defaultBg)
+                    changed = true
+                    return
+                }
+                if (bgStr != normalizedPath) {
+                    setValue(normalizedPath)
+                    changed = true
+                }
+            }
+
+            fun normalizeFontPath() {
+                if (textFont.isBlank() || !textFont.contains(File.separator)) {
+                    return
+                }
+                val localPath = FileUtils.getPath(appCtx.externalFiles, "font", FileUtils.getName(textFont))
+                when {
+                    FileUtils.exist(localPath) && textFont != localPath -> {
+                        textFont = localPath
+                        changed = true
+                    }
+
+                    !textFont.startsWith(appCtx.externalFiles.absolutePath) || !FileUtils.exist(textFont) -> {
+                        textFont = ""
+                        changed = true
+                    }
+                }
+            }
+
+            updateInt(bgAlpha, bgAlpha.coerceIn(0, 100)) { bgAlpha = it }
+            updateInt(bgType, bgType.coerceIn(0, 2)) { bgType = it }
+            updateInt(bgTypeNight, bgTypeNight.coerceIn(0, 2)) { bgTypeNight = it }
+            updateInt(bgTypeEInk, bgTypeEInk.coerceIn(0, 2)) { bgTypeEInk = it }
+            normalizeBgPath(bgType, bgStr, "#EEEEEE", { bgType = it }) { bgStr = it }
+            normalizeBgPath(bgTypeNight, bgStrNight, "#000000", { bgTypeNight = it }) { bgStrNight = it }
+            normalizeBgPath(bgTypeEInk, bgStrEInk, "#FFFFFF", { bgTypeEInk = it }) { bgStrEInk = it }
+            normalizeFontPath()
+            updateInt(readMenuAlpha, readMenuAlpha.coerceIn(35, 100)) { readMenuAlpha = it }
+            updateInt(pageAnim, pageAnim.coerceIn(PageAnim.coverPageAnim, PageAnim.linkedCoverPageAnim)) {
+                pageAnim = it
+            }
+            updateInt(pageAnimEInk, pageAnimEInk.coerceIn(PageAnim.coverPageAnim, PageAnim.linkedCoverPageAnim)) {
+                pageAnimEInk = it
+            }
+            updateInt(textBold, textBold.coerceIn(0, 2)) { textBold = it }
+            updateInt(textSize, textSize.coerceIn(5, 50)) { textSize = it }
+            updateFloat(letterSpacing, letterSpacing.coerceIn(-0.5f, 0.5f)) { letterSpacing = it }
+            updateInt(lineSpacingExtra, lineSpacingExtra.coerceIn(10, 20)) { lineSpacingExtra = it }
+            updateInt(paragraphSpacing, paragraphSpacing.coerceIn(0, 20)) { paragraphSpacing = it }
+            updateInt(paperInkStrength, paperInkStrength.coerceIn(0, 100)) { paperInkStrength = it }
+            updateInt(titleMode, titleMode.coerceIn(0, AdvancedTitleConfig.TITLE_MODE_ADVANCED)) {
+                titleMode = it
+            }
+            updateInt(titleSize, titleSize.coerceIn(0, 20)) { titleSize = it }
+            updateInt(titleTopSpacing, titleTopSpacing.coerceIn(0, 100)) { titleTopSpacing = it }
+            updateInt(titleBottomSpacing, titleBottomSpacing.coerceIn(0, 100)) { titleBottomSpacing = it }
+            updateInt(underlineMode, underlineMode.coerceAtLeast(0)) { underlineMode = it }
+            updateInt(paddingTop, paddingTop.coerceIn(0, 200)) { paddingTop = it }
+            updateInt(paddingBottom, paddingBottom.coerceIn(0, 100)) { paddingBottom = it }
+            updateInt(paddingLeft, paddingLeft.coerceIn(0, 100)) { paddingLeft = it }
+            updateInt(paddingRight, paddingRight.coerceIn(0, 100)) { paddingRight = it }
+            updateInt(headerPaddingTop, headerPaddingTop.coerceIn(0, 100)) { headerPaddingTop = it }
+            updateInt(headerPaddingBottom, headerPaddingBottom.coerceIn(0, 100)) { headerPaddingBottom = it }
+            updateInt(headerPaddingLeft, headerPaddingLeft.coerceIn(0, 100)) { headerPaddingLeft = it }
+            updateInt(headerPaddingRight, headerPaddingRight.coerceIn(0, 100)) { headerPaddingRight = it }
+            updateInt(footerPaddingTop, footerPaddingTop.coerceIn(0, 100)) { footerPaddingTop = it }
+            updateInt(footerPaddingBottom, footerPaddingBottom.coerceIn(0, 100)) { footerPaddingBottom = it }
+            updateInt(footerPaddingLeft, footerPaddingLeft.coerceIn(0, 100)) { footerPaddingLeft = it }
+            updateInt(footerPaddingRight, footerPaddingRight.coerceIn(0, 100)) { footerPaddingRight = it }
+            updateInt(headerMode, headerMode.coerceIn(0, 2)) { headerMode = it }
+            updateInt(footerMode, footerMode.coerceIn(0, 1)) { footerMode = it }
+
+            return changed
+        }
 
         @Transient
         private var textColorIntEInk = -1

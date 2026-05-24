@@ -10,6 +10,7 @@ import com.google.gson.JsonParser
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.AppConst.androidId
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -57,6 +58,7 @@ import io.legado.app.utils.getSharedPreferences
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.openInputStream
+import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.delay
@@ -77,6 +79,9 @@ object Restore {
     private const val TAG = "Restore"
 
     internal val backgroundAssetDirNames = arrayOf(
+        "bg",
+        "font",
+        "covers",
         PreferKey.bgImage,
         PreferKey.bgImageN,
         PreferKey.bookInfoBgImage,
@@ -240,6 +245,7 @@ object Restore {
         }?.onFailure {
             AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
         }
+        var restoredReadConfig = false
         if (!BackupConfig.ignoreReadConfig) {
             //恢复阅读界面配置
             File(path, ReadBookConfig.configFileName).takeIf {
@@ -247,7 +253,7 @@ object Restore {
             }?.runCatching {
                 FileUtils.delete(ReadBookConfig.configFilePath)
                 copyTo(File(ReadBookConfig.configFilePath))
-                ReadBookConfig.initConfigs()
+                restoredReadConfig = true
             }?.onFailure {
                 AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
             }
@@ -256,12 +262,18 @@ object Restore {
             }?.runCatching {
                 FileUtils.delete(ReadBookConfig.shareConfigFilePath)
                 copyTo(File(ReadBookConfig.shareConfigFilePath))
-                ReadBookConfig.initShareConfig()
+                restoredReadConfig = true
             }?.onFailure {
                 AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
             }
         }
         restoreBackgroundAssets(path)
+        repairLocalCoverPaths()
+        if (restoredReadConfig) {
+            ReadBookConfig.initConfigs()
+            ReadBookConfig.initShareConfig()
+        }
+        ReadBookConfig.repairConfigIfNeeded()
         restoreThemePackages(path)
         restoreNavigationIcons(path)
         //AppWebDav.downBgs()
@@ -327,7 +339,9 @@ object Restore {
             hideStatusBar = appCtx.getPrefBoolean(PreferKey.hideStatusBar)
             hideNavigationBar = appCtx.getPrefBoolean(PreferKey.hideNavigationBar)
             autoReadSpeed = appCtx.getPrefInt(PreferKey.autoReadSpeed, 46)
+            resetActiveConfig()
         }
+        postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
         appCtx.toastOnUi(R.string.restore_success)
         withContext(Main) {
             delay(100)
@@ -520,6 +534,57 @@ object Restore {
         if (changed) {
             edit.commit()
         }
+    }
+
+    fun repairLocalCoverPaths() {
+        val changedBooks = appDb.bookDao.all.mapNotNull { book ->
+            var changed = false
+            val coverUrl = normalizeLocalCoverPath(book.coverUrl)
+            val customCoverUrl = normalizeLocalCoverPath(book.customCoverUrl)
+            if (coverUrl != book.coverUrl) {
+                book.coverUrl = coverUrl
+                changed = true
+            }
+            if (customCoverUrl != book.customCoverUrl) {
+                book.customCoverUrl = customCoverUrl
+                changed = true
+            }
+            book.takeIf { changed }
+        }
+        if (changedBooks.isNotEmpty()) {
+            appDb.bookDao.update(*changedBooks.toTypedArray())
+        }
+
+        val changedGroups = appDb.bookGroupDao.all.mapNotNull { group ->
+            val cover = normalizeLocalCoverPath(group.cover)
+            if (cover != group.cover) {
+                group.cover = cover
+                group
+            } else {
+                null
+            }
+        }
+        if (changedGroups.isNotEmpty()) {
+            appDb.bookGroupDao.update(*changedGroups.toTypedArray())
+        }
+    }
+
+    fun normalizeLocalCoverPath(path: String?): String? {
+        if (path.isNullOrBlank() ||
+            path.startsWith("http", ignoreCase = true) ||
+            path.isContentScheme()
+        ) {
+            return path
+        }
+        if (!path.contains(File.separator)) {
+            return path
+        }
+        if (path.startsWith(appCtx.externalFiles.absolutePath) && File(path).exists()) {
+            return path
+        }
+        val fileName = File(path).name.takeIf { it.isNotBlank() } ?: return null
+        val restoredFile = appCtx.externalFiles.getFile("covers", fileName)
+        return restoredFile.takeIf { it.exists() }?.absolutePath
     }
 
     private fun normalizeStringPrefs() {

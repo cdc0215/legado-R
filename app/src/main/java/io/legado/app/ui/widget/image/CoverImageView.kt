@@ -27,6 +27,7 @@ import io.legado.app.help.CoverThumbnailCache
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
+import io.legado.app.help.storage.Restore
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.BookCover
 import io.legado.app.utils.textHeight
@@ -331,6 +332,7 @@ class CoverImageView @JvmOverloads constructor(
         onLoadFinish: (() -> Unit)? = null,
         preferThumb: Boolean = false
     ) {
+        val normalizedPath = Restore.normalizeLocalCoverPath(path)
         val currentAuthor = author?.replace(AppPattern.bdRegex, "")?.trim()?.also {
             this.author = it
         }
@@ -339,7 +341,7 @@ class CoverImageView @JvmOverloads constructor(
         }
         val useThumb = preferThumb && !AppConfig.loadCoverHighQuality
         val newLoadKey = listOf(
-            path.orEmpty(),
+            normalizedPath.orEmpty(),
             currentName.orEmpty(),
             currentAuthor.orEmpty(),
             sourceOrigin.orEmpty(),
@@ -351,8 +353,8 @@ class CoverImageView @JvmOverloads constructor(
             return
         }
         loadKey = newLoadKey
-        this.bitmapPath = path
-        val thumbKey = "$sourceOrigin|$path|$currentName|$currentAuthor"
+        this.bitmapPath = normalizedPath
+        val thumbKey = "$sourceOrigin|$normalizedPath|$currentName|$currentAuthor"
         if (AppConfig.useDefaultCover) {
             loadedKey = newLoadKey
             ImageLoader.load(context, BookCover.defaultDrawable)
@@ -378,9 +380,9 @@ class CoverImageView @JvmOverloads constructor(
             var builder = if (thumbFile != null) {
                 ImageLoader.load(context, thumbFile)
             } else if (fragment != null && lifecycle != null) {
-                ImageLoader.load(fragment, lifecycle, path)
+                ImageLoader.load(fragment, lifecycle, normalizedPath)
             } else {
-                ImageLoader.load(context, path)//Glide自动识别http://,content://和file://
+                ImageLoader.load(context, normalizedPath)//Glide自动识别http://,content://和file://
             }
             builder = builder.apply(options)
                 .let {

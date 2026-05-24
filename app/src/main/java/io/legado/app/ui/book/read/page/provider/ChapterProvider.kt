@@ -184,8 +184,8 @@ object ChapterProvider {
 //            reviewPaint.textAlign = Paint.Align.CENTER
         }
         //间距
-        lineSpacingExtra = ReadBookConfig.lineSpacingExtra / 10f
-        paragraphSpacing = ReadBookConfig.paragraphSpacing
+        lineSpacingExtra = ReadBookConfig.lineSpacingExtra.coerceAtLeast(10) / 10f
+        paragraphSpacing = ReadBookConfig.paragraphSpacing.coerceAtLeast(0)
         titleTopSpacing = ReadBookConfig.titleTopSpacing.dpToPx()
         titleBottomSpacing = ReadBookConfig.titleBottomSpacing.dpToPx()
         val bodyIndent = ReadBookConfig.paragraphIndent
@@ -352,7 +352,11 @@ object ChapterProvider {
         visibleRight = viewWidth - paddingRight
         visibleBottom = paddingTop + visibleHeight
 
-        if (paddingLeft >= visibleRight || paddingTop >= visibleBottom) {
+        if (visibleWidth <= 0 ||
+            visibleHeight <= 0 ||
+            paddingLeft >= visibleRight ||
+            paddingTop >= visibleBottom
+        ) {
             AppLog.put("边距设置过大，请重新设置", toast = true)
             setFallbackLayout()
         }

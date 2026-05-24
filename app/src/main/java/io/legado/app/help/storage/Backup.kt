@@ -65,6 +65,9 @@ object Backup {
     private val mutex = Mutex()
 
     private val backgroundAssetDirNames = arrayOf(
+        "bg",
+        "font",
+        "covers",
         PreferKey.bgImage,
         PreferKey.bgImageN,
         PreferKey.bookInfoBgImage,
