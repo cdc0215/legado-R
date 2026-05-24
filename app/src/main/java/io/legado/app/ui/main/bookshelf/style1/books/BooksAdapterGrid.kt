@@ -41,6 +41,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                         tvName.gone()
                     }
                     ivCover.loadThumb(item, false)
+                    ivLocal.visible(item.isLocal)
                     upRefresh(binding, item)
                 } else {
                     for (i in payloads.indices) {
@@ -54,6 +55,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                                 )
 
                                 "refresh" -> upRefresh(binding, item)
+                                "local" -> ivLocal.visible(item.isLocal)
                             }
                         }
                     }
@@ -63,6 +65,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                 if (payloads.isEmpty()) {
                     tvName.text = item.name
                     ivCover.loadThumb(item, false)
+                    ivLocal.visible(item.isLocal)
                     upRefresh(binding, item)
                 } else {
                     for (i in payloads.indices) {
@@ -76,6 +79,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                                 )
 
                                 "refresh" -> upRefresh(binding, item)
+                                "local" -> ivLocal.visible(item.isLocal)
                             }
                         }
                     }

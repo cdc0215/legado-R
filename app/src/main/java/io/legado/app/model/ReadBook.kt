@@ -9,6 +9,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ReadRecentBook
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.help.AppWebDav
@@ -75,6 +76,9 @@ object ReadBook : CoroutineScope by MainScope() {
     var isLocalBook = true
     var chapterChanged = false
     var skipReadAloudSyncOnce = false
+    var readAloudPageDetached = false
+        private set
+    private var pendingReadAloudChapterSync = false
     var prevTextChapter: TextChapter? = null
     var curTextChapter: TextChapter? = null
     var nextTextChapter: TextChapter? = null
@@ -287,22 +291,20 @@ object ReadBook : CoroutineScope by MainScope() {
         }.onError {
             AppLog.put("拉取阅读进度失败", it)
         }.onSuccess { progress ->
-            if (progress == null || progress.durChapterIndex < book.durChapterIndex ||
-                (progress.durChapterIndex == book.durChapterIndex
-                        && progress.durChapterPos < book.durChapterPos)
-            ) {
-                // 服务器没有进度或者进度比服务器快，上传现有进度
-                Coroutine.async {
-                    AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
-                    book.update()
+            when (progress?.compareWith(book)) {
+                null,
+                BookProgressComparison.LOCAL_NEWER -> {
+                    Coroutine.async {
+                        AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
+                        book.update()
+                    }
                 }
-            } else if (progress.durChapterIndex > book.durChapterIndex ||
-                progress.durChapterPos > book.durChapterPos
-            ) {
-                // 进度比服务器慢，执行传入动作
-                newProgressAction?.invoke(progress)
-            } else {
-                syncSuccessAction?.invoke()
+                BookProgressComparison.REMOTE_NEWER -> {
+                    newProgressAction?.invoke(progress)
+                }
+                BookProgressComparison.SAME -> {
+                    syncSuccessAction?.invoke()
+                }
             }
         }
     }
@@ -359,7 +361,11 @@ object ReadBook : CoroutineScope by MainScope() {
         return hasPrevPage
     }
 
-    fun moveToNextChapter(upContent: Boolean, upContentInPlace: Boolean = true): Boolean {
+    fun moveToNextChapter(
+        upContent: Boolean,
+        upContentInPlace: Boolean = true,
+        fromReadAloud: Boolean = false
+    ): Boolean {
         if (durChapterIndex < simulatedChapterSize - 1) {
             durChapterPos = 0
             durChapterIndex++
@@ -379,7 +385,7 @@ object ReadBook : CoroutineScope by MainScope() {
             saveRead()
             callBack?.upMenuView()
             AppLog.putDebug("moveToNextChapter-curPageChanged()")
-            curPageChanged()
+            curPageChanged(fromReadAloud = fromReadAloud)
             return true
         } else {
             AppLog.putDebug("跳转下一章失败,没有下一章")
@@ -389,7 +395,8 @@ object ReadBook : CoroutineScope by MainScope() {
 
     suspend fun moveToNextChapterAwait(
         upContent: Boolean,
-        upContentInPlace: Boolean = true
+        upContentInPlace: Boolean = true,
+        fromReadAloud: Boolean = false
     ): Boolean {
         if (durChapterIndex < simulatedChapterSize - 1) {
             durChapterPos = 0
@@ -410,7 +417,7 @@ object ReadBook : CoroutineScope by MainScope() {
             saveRead()
             callBack?.upMenuView()
             AppLog.putDebug("moveToNextChapter-curPageChanged()")
-            curPageChanged()
+            curPageChanged(fromReadAloud = fromReadAloud)
             return true
         } else {
             AppLog.putDebug("跳转下一章失败,没有下一章")
@@ -421,7 +428,8 @@ object ReadBook : CoroutineScope by MainScope() {
     fun moveToPrevChapter(
         upContent: Boolean,
         toLast: Boolean = true,
-        upContentInPlace: Boolean = true
+        upContentInPlace: Boolean = true,
+        fromReadAloud: Boolean = false
     ): Boolean {
         if (durChapterIndex > 0) {
             durChapterPos = if (toLast) prevTextChapter?.lastReadLength ?: Int.MAX_VALUE else 0
@@ -439,7 +447,7 @@ object ReadBook : CoroutineScope by MainScope() {
             loadContent(durChapterIndex.minus(1), upContent, false)
             saveRead()
             callBack?.upMenuView()
-            curPageChanged()
+            curPageChanged(fromReadAloud = fromReadAloud)
             return true
         } else {
             return false
@@ -459,7 +467,7 @@ object ReadBook : CoroutineScope by MainScope() {
         recycleRecorders(durPageIndex, index)
         durChapterPos = curTextChapter?.getReadLength(index) ?: index
         saveRead(true)
-        curPageChanged(true)
+        curPageChanged()
     }
 
     fun recycleRecorders(beforeIndex: Int, afterIndex: Int) {
@@ -500,24 +508,45 @@ object ReadBook : CoroutineScope by MainScope() {
     /**
      * 当前页面变化
      */
-    private fun curPageChanged(pageChanged: Boolean = false) {
+    private fun curPageChanged(fromReadAloud: Boolean = false) {
         callBack?.pageChanged()
         curTextChapter?.let {
-            if (BaseReadAloudService.isRun && it.isCompleted) {
+            if (BaseReadAloudService.isRun) {
                 if (skipReadAloudSyncOnce) {
                     skipReadAloudSyncOnce = false
                 } else {
-                    val scrollPageAnim = pageAnim() == 3
-                    if (scrollPageAnim && pageChanged) {
-                        ReadAloud.pause(appCtx)
-                    } else {
-                        readAloud(!BaseReadAloudService.pause)
+                    val syncFromReadAloud = fromReadAloud || pendingReadAloudChapterSync
+                    if (syncFromReadAloud) {
+                        if (it.isCompleted) {
+                            pendingReadAloudChapterSync = false
+                            attachReadAloudPage()
+                            readAloud(!BaseReadAloudService.pause)
+                        } else {
+                            pendingReadAloudChapterSync = true
+                        }
+                    } else if (it.isCompleted) {
+                        pendingReadAloudChapterSync = false
+                        detachReadAloudPage()
                     }
                 }
             }
         }
         upReadTime()
         preDownload()
+    }
+
+    fun detachReadAloudPage() {
+        if (!readAloudPageDetached) {
+            readAloudPageDetached = true
+            postEvent(EventBus.READ_ALOUD_PAGE_DETACHED, true)
+        }
+    }
+
+    fun attachReadAloudPage() {
+        if (readAloudPageDetached) {
+            readAloudPageDetached = false
+            postEvent(EventBus.READ_ALOUD_PAGE_DETACHED, false)
+        }
     }
 
     /**

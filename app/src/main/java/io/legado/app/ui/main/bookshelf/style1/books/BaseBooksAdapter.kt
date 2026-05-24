@@ -29,6 +29,7 @@ abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
                     oldItem.durChapterTitle != newItem.durChapterTitle -> false
                     oldItem.latestChapterTitle != newItem.latestChapterTitle -> false
                     oldItem.lastCheckCount != newItem.lastCheckCount -> false
+                    oldItem.type != newItem.type -> false
                     oldItem.getDisplayCover() != newItem.getDisplayCover() -> false
                     oldItem.getUnreadChapterNum() != newItem.getUnreadChapterNum() -> false
                     else -> true
@@ -61,6 +62,9 @@ abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
                 }
                 if (oldItem.latestChapterTime != newItem.latestChapterTime) {
                     bundle.putBoolean("lastUpdateTime", true)
+                }
+                if (oldItem.type != newItem.type) {
+                    bundle.putBoolean("local", true)
                 }
                 if (bundle.isEmpty) return null
                 return bundle

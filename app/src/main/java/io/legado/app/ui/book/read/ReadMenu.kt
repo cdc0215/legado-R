@@ -57,7 +57,6 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 import splitties.views.onClick
 import splitties.views.onLongClick
-import androidx.core.graphics.toColorInt
 import io.legado.app.constant.BookType
 import io.legado.app.utils.buildMainHandler
 
@@ -88,9 +87,7 @@ class ReadMenu @JvmOverloads constructor(
     private val immersiveMenu: Boolean
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
     private var bgColor: Int = if (immersiveMenu) {
-        kotlin.runCatching {
-            ReadBookConfig.durConfig.curBgStr().toColorInt()
-        }.getOrDefault(context.bottomBackground)
+        ReadBookConfig.durConfig.curBgColor()
     } else {
         context.bottomBackground
     }
@@ -327,9 +324,7 @@ class ReadMenu @JvmOverloads constructor(
 
     private fun upColorConfig() {
         bgColor = if (immersiveMenu) {
-            kotlin.runCatching {
-                ReadBookConfig.durConfig.curBgStr().toColorInt()
-            }.getOrDefault(context.bottomBackground)
+            ReadBookConfig.durConfig.curBgColor()
         } else {
             context.bottomBackground
         }

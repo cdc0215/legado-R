@@ -234,11 +234,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
                 .show(requireActivity())
         }
         rowBgColor.setOnClickListener {
-            val bgColor = if (ReadBookConfig.durConfig.curBgType() == 0) {
-                ReadBookConfig.durConfig.curBgStr().toColorInt()
-            } else {
-                "#015A86".toColorInt()
-            }
+            val bgColor = currentBgColorForPicker()
             ColorPickerDialog.newBuilder()
                 .setColor(bgColor)
                 .setShowAlphaSlider(false)
@@ -706,7 +702,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         val config = ReadBookConfig.durConfig
         val textColor = config.curTextColor()
         val bgIsImage = config.curBgType() != 0
-        val bgColor = if (bgIsImage) "#015A86".toColorInt() else config.curBgStr().toColorInt()
+        val bgColor = currentBgColorForPicker()
         val textAccentColor = config.curTextAccentColor()
         val menuColor = config.curReadMenuBgColor() ?: defaultReadMenuBgColor()
         tvTextColorValue.text = textColor.toHexText()
@@ -741,13 +737,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         val baseColor = if (
             AppConfig.readBarStyleFollowPage
             && ReadBookConfig.durConfig.curBgType() == 0
-        ) {
-            runCatching {
-                ReadBookConfig.durConfig.curBgStr().toColorInt()
-            }.getOrDefault(requireContext().bottomBackground)
-        } else {
-            requireContext().bottomBackground
-        }
+        ) ReadBookConfig.durConfig.curBgColor()
+        else requireContext().bottomBackground
         val palette = ReaderSheetStyle.resolve(requireContext(), baseColor)
         val isBgLight = ColorUtils.isColorLight(baseColor)
         return ColorUtils.blendColors(
@@ -755,6 +746,15 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             palette.primaryColor,
             if (isBgLight) 0.18f else 0.28f
         )
+    }
+
+    private fun currentBgColorForPicker(): Int {
+        val config = ReadBookConfig.durConfig
+        return if (config.curBgType() == 0) {
+            config.curBgColor()
+        } else {
+            "#015A86".toColorInt()
+        }
     }
 
     private fun colorSwatch(color: Int): GradientDrawable {

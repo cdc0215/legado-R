@@ -804,9 +804,9 @@ object ReadBookConfig {
         private var initColorInt = false
 
         private fun initColorInt() {
-            textColorIntEInk = textColorEInk.toColorInt()
-            textColorIntNight = textColorNight.toColorInt()
-            textColorInt = textColor.toColorInt()
+            textColorIntEInk = colorOrDefault(textColorEInk, "#000000")
+            textColorIntNight = colorOrDefault(textColorNight, "#ADADAD")
+            textColorInt = colorOrDefault(textColor, "#3E3D3B")
             initColorInt = true
         }
 
@@ -823,9 +823,9 @@ object ReadBookConfig {
         private var initAccentColorInt = false
 
         private fun initAccentColorInt() {
-            textAccentColorIntEInk = textAccentColorEInk.toColorInt()
-            textAccentColorIntNight = textAccentColorNight.toColorInt()
-            textAccentColorInt = textAccentColor.toColorInt()
+            textAccentColorIntEInk = colorOrDefault(textAccentColorEInk, "#000000")
+            textAccentColorIntNight = colorOrDefault(textAccentColorNight, "#FE4D55")
+            textAccentColorInt = colorOrDefault(textAccentColor, "#E53935")
             initAccentColorInt = true
         }
 
@@ -851,7 +851,7 @@ object ReadBookConfig {
                 AppConfig.isNightTheme -> readMenuBgColorNight
                 else -> readMenuBgColor
             }
-            return color?.takeIf { it.isNotBlank() }?.toColorInt()
+            return colorOrNull(color)
         }
 
         fun setCurTextColor(color: Int) {
@@ -971,6 +971,14 @@ object ReadBookConfig {
             }
         }
 
+        fun curBgColor(): Int {
+            return when {
+                AppConfig.isEInkMode -> colorOrDefault(bgStrEInk, "#FFFFFF")
+                AppConfig.isNightTheme -> colorOrDefault(bgStrNight, "#000000")
+                else -> colorOrDefault(bgStr, "#EEEEEE")
+            }
+        }
+
         fun curBgType(): Int {
             return when {
                 AppConfig.isEInkMode -> bgTypeEInk
@@ -1009,7 +1017,7 @@ object ReadBookConfig {
             val resources = appCtx.resources
             try {
                 bgDrawable = when (curBgType()) {
-                    0 -> curBgStr.toColorInt().toDrawable()
+                    0 -> curBgColor().toDrawable()
                     1 -> {
                         val path = "bg" + File.separator + curBgStr
                         val bitmap = BitmapUtils.decodeAssetsBitmap(appCtx, path, width, height)
@@ -1035,6 +1043,16 @@ object ReadBookConfig {
                 e.printOnDebug()
             }
             return bgDrawable ?: appCtx.getCompatColor(R.color.background).toDrawable()
+        }
+
+        private fun colorOrNull(color: String?): Int? {
+            return color
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { it.toColorInt() }.getOrNull() }
+        }
+
+        private fun colorOrDefault(color: String?, default: String): Int {
+            return colorOrNull(color) ?: default.toColorInt()
         }
 
         fun getBgPath(bgIndex: Int): String? {

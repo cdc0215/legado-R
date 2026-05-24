@@ -235,7 +235,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 return
             } else {
                 VideoPlay.startPlay(playerView)
-                VideoPlay.saveRead()
+                syncVideoProgress()
                 initView()
             }
         } else {
@@ -459,7 +459,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             initView()
             upView()
             VideoPlay.startPlay(playerView)
-            VideoPlay.saveRead()
+            syncVideoProgress()
         }
         bookInfoViewModel.initData(intent)
     }
@@ -742,7 +742,19 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         initView()
         upView()
         VideoPlay.startPlay(playerView)
-        VideoPlay.saveRead()
+        syncVideoProgress()
+    }
+
+    private fun syncVideoProgress() {
+        if (!VideoPlay.inBookshelf) {
+            VideoPlay.saveRead()
+            return
+        }
+        VideoPlay.syncProgress(
+            newProgressAction = { progress -> VideoPlay.setProgress(progress, playerView) },
+            uploadSuccessAction = { VideoPlay.saveRead() },
+            syncSuccessAction = { VideoPlay.saveRead() }
+        )
     }
 
     private fun upView() {
@@ -1188,6 +1200,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             glideImageGetter.clear()
         }
         VideoPlay.saveRead()
+        if (VideoPlay.inBookshelf) {
+            VideoPlay.syncProgress()
+        }
         VideoPlay.stopLoading()
         playerView.getCurrentPlayer().release()
         setVideoKeepScreenOn(false)

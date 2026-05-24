@@ -18,4 +18,22 @@ data class BookProgress(
         durChapterTitle = book.durChapterTitle
     )
 
+    fun compareWith(book: Book): BookProgressComparison {
+        return when {
+            durChapterTime > book.durChapterTime -> BookProgressComparison.REMOTE_NEWER
+            durChapterTime < book.durChapterTime -> BookProgressComparison.LOCAL_NEWER
+            durChapterIndex > book.durChapterIndex -> BookProgressComparison.REMOTE_NEWER
+            durChapterIndex < book.durChapterIndex -> BookProgressComparison.LOCAL_NEWER
+            durChapterPos > book.durChapterPos -> BookProgressComparison.REMOTE_NEWER
+            durChapterPos < book.durChapterPos -> BookProgressComparison.LOCAL_NEWER
+            else -> BookProgressComparison.SAME
+        }
+    }
+
+}
+
+enum class BookProgressComparison {
+    SAME,
+    LOCAL_NEWER,
+    REMOTE_NEWER
 }

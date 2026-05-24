@@ -13,7 +13,6 @@ import io.legado.app.help.MediaHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.model.ReadAloud
-import io.legado.app.model.ReadBook
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.fromJsonObject
@@ -241,7 +240,7 @@ class TTSReadAloudService : BaseReadAloudService() {
                         && readAloudNumber + 1 > it.getReadLength(pageIndex + 1)
                     ) {
                         pageIndex++
-                        ReadBook.moveToNextPage()
+                        moveReadBookToNextPageForReadAloud()
                     }
                     upTtsProgress(readAloudNumber + 1)
                 }
@@ -266,7 +265,7 @@ class TTSReadAloudService : BaseReadAloudService() {
                         && readAloudNumber + start > it.getReadLength(pageIndex + 1)
                     ) {
                         pageIndex++
-                        ReadBook.moveToNextPage()
+                        moveReadBookToNextPageForReadAloud()
                         upTtsProgress(readAloudNumber + start)
                     }
                 }

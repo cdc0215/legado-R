@@ -286,7 +286,7 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         }
         binding.tvBgColor.setOnClickListener {
             val bgColor =
-                if (curBgType() == 0) curBgStr().toColorInt()
+                if (curBgType() == 0) curBgColor()
                 else "#015A86".toColorInt()
             ColorPickerDialog.newBuilder()
                 .setColor(bgColor)

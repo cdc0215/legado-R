@@ -41,6 +41,22 @@
                 tools:ignore="UnusedAttribute,ImageContrastCheck"
                 tools:layout_editor_absoluteX="4dp" />
 
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_local"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginTop="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="@drawable/bg_bookshelf_local_badge"
+                android:contentDescription="@string/local"
+                android:padding="4dp"
+                android:src="@drawable/ic_docs"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="@+id/iv_cover"
+                app:layout_constraintTop_toTopOf="@+id/iv_cover"
+                app:tint="@color/white"
+                tools:visibility="visible" />
+
             <TextView
                 android:id="@+id/tv_name"
                 android:layout_width="0dp"

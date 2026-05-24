@@ -431,6 +431,9 @@ class AudioPlayActivity :
 
     override fun onDestroy() {
         super.onDestroy()
+        if (AudioPlay.inBookshelf) {
+            AudioPlay.syncProgress()
+        }
         if (AudioPlay.status != Status.PLAY) {
             AudioPlay.stop()
         }

@@ -26,6 +26,22 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:ignore="UnusedAttribute" />
 
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/iv_local"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="4dp"
+        android:background="@drawable/bg_bookshelf_local_badge"
+        android:contentDescription="@string/local"
+        android:padding="4dp"
+        android:src="@drawable/ic_docs"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@+id/iv_cover"
+        app:layout_constraintTop_toTopOf="@+id/iv_cover"
+        app:tint="@color/white"
+        tools:visibility="visible" />
+
     <FrameLayout
         android:id="@+id/fl_has_new"
         android:layout_width="wrap_content"

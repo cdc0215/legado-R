@@ -22,6 +22,8 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecentBook
 import io.legado.app.data.entities.ReadRecord
@@ -29,6 +31,7 @@ import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
 import io.legado.app.exception.ContentEmptyException
+import io.legado.app.help.AppWebDav
 import io.legado.app.help.CacheManager
 import io.legado.app.help.ReadRecordDailyHelper
 import io.legado.app.help.book.getDanmaku
@@ -650,6 +653,74 @@ object VideoPlay : CoroutineScope by MainScope(){
         startPlay(player)
         postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //更新选集视图
         return true
+    }
+
+    fun setProgress(progress: BookProgress, player: StandardGSYVideoPlayer? = null) {
+        val toc = toc ?: return
+        if (progress.durChapterIndex !in toc.indices) {
+            return
+        }
+        if (volumes.isEmpty()) {
+            durVolumeIndex = 0
+            chapterInVolumeIndex = progress.durChapterIndex
+        } else {
+            val volumeIndex = volumes.indexOfLast { it.index < progress.durChapterIndex }
+                .coerceAtLeast(0)
+            durVolumeIndex = volumeIndex
+            durVolume = volumes.getOrNull(volumeIndex)
+            chapterInVolumeIndex = (progress.durChapterIndex - (durVolume?.index ?: -1) - 1)
+                .coerceAtLeast(0)
+        }
+        durChapterPos = progress.durChapterPos
+        upEpisodes()
+        chapter = episodes?.getOrNull(chapterInVolumeIndex)
+        videoTitle = chapter?.title ?: progress.durChapterTitle
+        saveRead(progress.durChapterPos)
+        postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
+        player?.let {
+            startPlay(it)
+        }
+    }
+
+    fun uploadProgress(successAction: (() -> Unit)? = null) {
+        book?.let {
+            Coroutine.async {
+                AppWebDav.uploadBookProgress(it) {
+                    successAction?.invoke()
+                }
+                it.update()
+            }
+        }
+    }
+
+    fun syncProgress(
+        newProgressAction: ((progress: BookProgress) -> Unit)? = null,
+        uploadSuccessAction: (() -> Unit)? = null,
+        syncSuccessAction: (() -> Unit)? = null,
+    ) {
+        if (!AppConfig.syncBookProgress) return
+        val book = book ?: return
+        Coroutine.async {
+            AppWebDav.getBookProgress(book)
+        }.onError {
+            AppLog.put("拉取视频进度失败", it)
+        }.onSuccess { progress ->
+            when (progress?.compareWith(book)) {
+                null,
+                BookProgressComparison.LOCAL_NEWER -> {
+                    Coroutine.async {
+                        AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
+                        book.update()
+                    }
+                }
+                BookProgressComparison.REMOTE_NEWER -> {
+                    newProgressAction?.invoke(progress)
+                }
+                BookProgressComparison.SAME -> {
+                    syncSuccessAction?.invoke()
+                }
+            }
+        }
     }
 
     fun saveRead(durPos: Int? = null) {

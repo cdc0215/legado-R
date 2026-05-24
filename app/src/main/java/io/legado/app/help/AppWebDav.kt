@@ -7,6 +7,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.Backup
@@ -417,10 +418,7 @@ object AppWebDav {
                 return
             }
             getBookProgress(book)?.let { bookProgress ->
-                if (bookProgress.durChapterIndex > book.durChapterIndex
-                    || (bookProgress.durChapterIndex == book.durChapterIndex
-                            && bookProgress.durChapterPos > book.durChapterPos)
-                ) {
+                if (bookProgress.compareWith(book) == BookProgressComparison.REMOTE_NEWER) {
                     book.durChapterIndex = bookProgress.durChapterIndex
                     book.durChapterPos = bookProgress.durChapterPos
                     book.durChapterTitle = bookProgress.durChapterTitle

@@ -12,9 +12,12 @@ import io.legado.app.constant.Status
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecentBook
 import io.legado.app.data.entities.ReadRecord
+import io.legado.app.help.AppWebDav
 import io.legado.app.help.ReadRecordDailyHelper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.getBookSource
@@ -344,6 +347,74 @@ object AudioPlay : CoroutineScope by MainScope() {
             context.startService<AudioPlayService> {
                 action = IntentAction.adjustProgress
                 putExtra("position", position)
+            }
+        }
+    }
+
+    fun setProgress(progress: BookProgress) {
+        if (progress.durChapterIndex !in 0..<simulatedChapterSize) {
+            return
+        }
+        val chapterChanged = durChapterIndex != progress.durChapterIndex
+        if (chapterChanged) {
+            stopPlay()
+            durChapterIndex = progress.durChapterIndex
+            durPlayUrl = ""
+            durLyric = null
+            durAudioSize = 0
+        }
+        durChapterPos = progress.durChapterPos
+        saveRead(first = chapterChanged)
+        upDurChapter()
+        if (chapterChanged) {
+            Coroutine.async {
+                loadPlayUrl()
+            }
+        } else if (AudioPlayService.isRun) {
+            context.startService<AudioPlayService> {
+                action = IntentAction.adjustProgress
+                putExtra("position", durChapterPos)
+            }
+        }
+    }
+
+    fun uploadProgress(successAction: (() -> Unit)? = null) {
+        book?.let {
+            Coroutine.async {
+                AppWebDav.uploadBookProgress(it) {
+                    successAction?.invoke()
+                }
+                it.update()
+            }
+        }
+    }
+
+    fun syncProgress(
+        newProgressAction: ((progress: BookProgress) -> Unit)? = null,
+        uploadSuccessAction: (() -> Unit)? = null,
+        syncSuccessAction: (() -> Unit)? = null,
+    ) {
+        if (!AppConfig.syncBookProgress) return
+        val book = book ?: return
+        Coroutine.async {
+            AppWebDav.getBookProgress(book)
+        }.onError {
+            AppLog.put("拉取听书进度失败", it)
+        }.onSuccess { progress ->
+            when (progress?.compareWith(book)) {
+                null,
+                BookProgressComparison.LOCAL_NEWER -> {
+                    Coroutine.async {
+                        AppWebDav.uploadBookProgress(BookProgress(book), uploadSuccessAction)
+                        book.update()
+                    }
+                }
+                BookProgressComparison.REMOTE_NEWER -> {
+                    newProgressAction?.invoke(progress)
+                }
+                BookProgressComparison.SAME -> {
+                    syncSuccessAction?.invoke()
+                }
             }
         }
     }
