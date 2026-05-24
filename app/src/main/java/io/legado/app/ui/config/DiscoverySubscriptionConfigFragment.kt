@@ -89,25 +89,14 @@ class DiscoverySubscriptionConfigFragment : PreferenceFragment(),
 
     private fun consumeTargetKey() {
         if (targetKeyHandled) return
-        val rawTargetKey = activity?.intent?.getStringExtra("targetKey")?.trim().orEmpty()
-        if (rawTargetKey.isBlank()) return
-        val targetKey = when (rawTargetKey) {
+        targetKeyHandled = consumeActivityTargetKey { rawTargetKey ->
+            when (rawTargetKey) {
             KEY_MODERN_RSS_PAGE,
             KEY_SEARCH_JUMP_MODERN_RSS_PAGE,
             KEY_SEARCH_JUMP_RSS_MODE -> KEY_RSS_MODE
             KEY_SEARCH_JUMP_DISCOVERY_MODE -> KEY_DISCOVERY_MODE
             else -> rawTargetKey
-        }
-        val preference = findPreference<Preference>(targetKey) ?: return
-        targetKeyHandled = true
-        listView.post {
-            scrollToPreference(preference)
-            if (preference is SwitchPreferenceCompat) {
-                preference.isChecked = !preference.isChecked
-            } else {
-                onPreferenceTreeClick(preference)
             }
-            activity?.intent?.removeExtra("targetKey")
         }
     }
 

@@ -54,6 +54,7 @@ object ThemeConfig {
     private const val DEFAULT_NIGHT_PRIMARY = 0xFF252528.toInt()
     private const val DEFAULT_DAY_PRIMARY_HEX = "#F1F2F6"
     private const val LEGACY_DEFAULT_DAY_PRIMARY = 0xFF795548.toInt()
+    const val DEFAULT_BOOK_INFO_BACKGROUND_BLUR = 12
     private var usableBgImageCacheKey: String? = null
     private var usableBgImageCacheValue: Boolean = false
     const val configFileName = "themeConfig.json"
@@ -165,6 +166,32 @@ object ThemeConfig {
             return bgImage?.let { CenterCropBitmapDrawable(context.resources, it) }
         }
         return bgImage?.stackBlur(bgImgBlu)?.let { CenterCropBitmapDrawable(context.resources, it) }
+    }
+
+    fun getBookInfoBgImage(context: Context, metrics: DisplayMetrics): Drawable? {
+        val themeMode = getTheme()
+        val preferenceKey = when (themeMode) {
+            Theme.Light -> PreferKey.bookInfoBgImage
+            Theme.Dark -> PreferKey.bookInfoBgImageN
+            else -> return null
+        }
+        val path = context.getPrefString(preferenceKey)?.takeIf { it.isNotBlank() } ?: return null
+        val bgImgBlur = when (themeMode) {
+            Theme.Light -> context.getPrefInt(
+                PreferKey.bookInfoBgImageBlurring,
+                DEFAULT_BOOK_INFO_BACKGROUND_BLUR
+            )
+            Theme.Dark -> context.getPrefInt(
+                PreferKey.bookInfoBgImageNBlurring,
+                DEFAULT_BOOK_INFO_BACKGROUND_BLUR
+            )
+            else -> DEFAULT_BOOK_INFO_BACKGROUND_BLUR
+        }.coerceIn(0, 25)
+        val bgImage = BitmapUtils.decodeBitmap(path, metrics.widthPixels, metrics.heightPixels)
+        if (bgImgBlur == 0) {
+            return bgImage?.let { CenterCropBitmapDrawable(context.resources, it) }
+        }
+        return bgImage?.stackBlur(bgImgBlur)?.let { CenterCropBitmapDrawable(context.resources, it) }
     }
 
     fun hasUsableBgImage(context: Context): Boolean {
@@ -311,6 +338,7 @@ object ThemeConfig {
             val isNightTheme = config.isNightTheme
             val backgroundPath = config.backgroundImgPath
             val bookInfoBackgroundPath = config.bookInfoBackgroundImgPath
+            val bookInfoBackgroundBlur = config.bookInfoBackgroundBlur().coerceIn(0, 25)
             config.uiCornerScale?.let {
                 context.putPrefString(PreferKey.uiCornerScale, it.coerceIn(0f, 3f).toPlainScale())
             }
@@ -375,6 +403,7 @@ object ThemeConfig {
                 context.putPrefString(PreferKey.bgImageN, backgroundPath)
                 context.putPrefInt(PreferKey.bgImageNBlurring, backgroundBlur)
                 context.putPrefString(PreferKey.bookInfoBgImageN, bookInfoBackgroundPath)
+                context.putPrefInt(PreferKey.bookInfoBgImageNBlurring, bookInfoBackgroundBlur)
             } else {
                 context.putPrefString(PreferKey.dThemeName, config.themeName)
                 context.putPrefInt(PreferKey.cPrimary, primary)
@@ -385,6 +414,7 @@ object ThemeConfig {
                 context.putPrefString(PreferKey.bgImage, backgroundPath)
                 context.putPrefInt(PreferKey.bgImageBlurring, backgroundBlur)
                 context.putPrefString(PreferKey.bookInfoBgImage, bookInfoBackgroundPath)
+                context.putPrefInt(PreferKey.bookInfoBgImageBlurring, bookInfoBackgroundBlur)
             }
             if (switchNightMode) {
                 AppConfig.isNightTheme = isNightTheme
@@ -446,6 +476,8 @@ object ThemeConfig {
             context.getPrefInt(PreferKey.bgImageBlurring, 0)
         val bookInfoBgImgPath =
             context.getPrefString(PreferKey.bookInfoBgImage)
+        val bookInfoBgImgBlur =
+            context.getPrefInt(PreferKey.bookInfoBgImageBlurring, DEFAULT_BOOK_INFO_BACKGROUND_BLUR)
         val stored = configList.firstOrNull {
             it.themeName == name && !it.isNightTheme
         }
@@ -462,6 +494,7 @@ object ThemeConfig {
                 backgroundImgPath = bgImgPath,
                 backgroundImgBlur = bgImgBlur,
                 bookInfoBackgroundImgPath = bookInfoBgImgPath,
+                bookInfoBackgroundImgBlur = bookInfoBgImgBlur,
                 uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
                 uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
                 uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow,
@@ -499,6 +532,8 @@ object ThemeConfig {
             context.getPrefInt(PreferKey.bgImageNBlurring, 0)
         val bookInfoBgImgPath =
             context.getPrefString(PreferKey.bookInfoBgImageN)
+        val bookInfoBgImgBlur =
+            context.getPrefInt(PreferKey.bookInfoBgImageNBlurring, DEFAULT_BOOK_INFO_BACKGROUND_BLUR)
         val stored = configList.firstOrNull {
             it.themeName == name && it.isNightTheme
         }
@@ -514,6 +549,7 @@ object ThemeConfig {
                 backgroundImgPath = bgImgPath,
                 backgroundImgBlur = bgImgBlur,
                 bookInfoBackgroundImgPath = bookInfoBgImgPath,
+                bookInfoBackgroundImgBlur = bookInfoBgImgBlur,
                 uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
                 uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
                 uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow,
@@ -532,10 +568,8 @@ object ThemeConfig {
         } ?: return config
         return config.copy(
             backgroundImgPath = preferThemeAsset(config.backgroundImgPath, stored.backgroundImgPath),
-            bookInfoBackgroundImgPath = preferThemeAsset(
-                config.bookInfoBackgroundImgPath,
-                stored.bookInfoBackgroundImgPath
-            ),
+            bookInfoBackgroundImgPath = config.bookInfoBackgroundImgPath,
+            bookInfoBackgroundImgBlur = config.bookInfoBackgroundImgBlur,
             backgroundImgBlur = if (config.backgroundImgPath.isNullOrBlank() && !stored.backgroundImgPath.isNullOrBlank()) {
                 stored.backgroundImgBlur
             } else {
@@ -697,6 +731,7 @@ object ThemeConfig {
         var backgroundImgPath: String?,
         var backgroundImgBlur: Int,
         var bookInfoBackgroundImgPath: String? = null,
+        var bookInfoBackgroundImgBlur: Int? = null,
         var uiCornerScale: Float? = null,
         var uiLayoutAlpha: Int? = null,
         var uiCornerSearchFollow: Boolean? = null,
@@ -723,6 +758,7 @@ object ThemeConfig {
                         && other.backgroundImgPath == backgroundImgPath
                         && other.backgroundImgBlur == backgroundImgBlur
                         && other.bookInfoBackgroundImgPath == bookInfoBackgroundImgPath
+                        && other.bookInfoBackgroundImgBlur == bookInfoBackgroundImgBlur
                         && other.uiCornerScale == uiCornerScale
                         && other.uiLayoutAlpha == uiLayoutAlpha
                         && other.uiCornerSearchFollow == uiCornerSearchFollow
@@ -745,6 +781,7 @@ object ThemeConfig {
             "backgroundImgPath" to backgroundImgPath,
             "backgroundImgBlur" to backgroundImgBlur,
             "bookInfoBackgroundImgPath" to bookInfoBackgroundImgPath,
+            "bookInfoBackgroundImgBlur" to bookInfoBackgroundImgBlur,
             "uiCornerScale" to uiCornerScale,
             "uiLayoutAlpha" to uiLayoutAlpha,
             "uiCornerSearchFollow" to uiCornerSearchFollow,
@@ -753,6 +790,10 @@ object ThemeConfig {
             "uiFontPath" to uiFontPath,
             "titleFontPath" to titleFontPath
         )
+
+        fun bookInfoBackgroundBlur(): Int {
+            return bookInfoBackgroundImgBlur ?: DEFAULT_BOOK_INFO_BACKGROUND_BLUR
+        }
 
     }
 

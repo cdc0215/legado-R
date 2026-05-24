@@ -147,10 +147,36 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
             val searchText: String = listOf(title, summary, key).joinToString(" ").lowercase()
         }
 
+        private data class SubSearchSource(
+            val ownerKey: String,
+            val xmlRes: Int,
+            val ownerConfigTag: String
+        )
+
+        private val subSearchSources = listOf(
+            SubSearchSource("theme_setting", R.xml.pref_config_theme, ConfigTag.THEME_CONFIG),
+            SubSearchSource("theme_setting", R.xml.pref_config_welcome, ConfigTag.WELCOME_CONFIG),
+            SubSearchSource(
+                "theme_setting",
+                R.xml.pref_config_discovery_subscription,
+                ConfigTag.DISCOVERY_SUBSCRIPTION_CONFIG
+            ),
+            SubSearchSource("theme_setting", R.xml.pref_config_discovery, ConfigTag.DISCOVERY_CONFIG),
+            SubSearchSource("theme_setting", R.xml.pref_config_subscription, ConfigTag.SUBSCRIPTION_CONFIG),
+            SubSearchSource("web_dav_setting", R.xml.pref_config_backup, ConfigTag.BACKUP_CONFIG),
+            SubSearchSource("coverConfig", R.xml.pref_config_cover, ConfigTag.COVER_CONFIG),
+            SubSearchSource("ai_setting", R.xml.pref_config_ai, ConfigTag.AI_CONFIG),
+            SubSearchSource("setting", R.xml.pref_config_other, ConfigTag.OTHER_CONFIG),
+            SubSearchSource("setting", R.xml.pref_config_read, ConfigTag.READ_CONFIG),
+            SubSearchSource("setting", R.xml.pref_config_aloud, ConfigTag.ALOUD_CONFIG)
+        )
+
         private val subSearchItems by lazy(LazyThreadSafetyMode.NONE) { buildSubSearchItems() }
-        private val ownerMatchedSubItems = hashMapOf<String, List<SubSearchItem>>()
+        private val visibleSubSearchItems = hashMapOf<String, SubSearchItem>()
         private var activeSearchKeyword: String = ""
         private val originalSummaries = hashMapOf<String, CharSequence?>()
+        private var subSearchGroups = emptyList<androidx.preference.PreferenceCategory>()
+        private var subSearchResultPreferences = emptyList<Pair<PreferenceGroup, Preference>>()
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             putPrefBoolean(PreferKey.webService, WebService.isRun)
@@ -222,14 +248,16 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         fun filterMainPreferences(query: String?) {
             val keyword = query?.trim().orEmpty().lowercase()
             activeSearchKeyword = keyword
-            ownerMatchedSubItems.clear()
+            visibleSubSearchItems.clear()
             val root = preferenceScreen ?: return
+            removeSubSearchGroup(root)
             if (keyword.isBlank()) {
                 restoreMainSummaries(root)
                 resetVisibility(root)
                 return
             }
             filterMainGroup(root, keyword)
+            showSubSearchResults(root, keyword)
         }
 
         private fun filterMainGroup(group: PreferenceGroup, keyword: String): Boolean {
@@ -263,32 +291,14 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
             val titleText = preference.title?.toString().orEmpty().lowercase()
             val summaryText = preference.summary?.toString().orEmpty().lowercase()
             val keyText = key.lowercase()
-            val matchedSubItems = subSearchItems
-                .filter { it.ownerKey == key && it.searchText.contains(keyword) }
-            if (matchedSubItems.isNotEmpty()) {
-                ownerMatchedSubItems[key] = matchedSubItems
-            }
-            updateSearchSummary(preference, matchedSubItems)
+            updateSearchSummary(preference)
             return titleText.contains(keyword)
                 || summaryText.contains(keyword)
                 || keyText.contains(keyword)
-                || matchedSubItems.isNotEmpty()
         }
 
         private fun buildSubSearchItems(): List<SubSearchItem> {
-            return listOf(
-                Triple("theme_setting", R.xml.pref_config_theme, ConfigTag.THEME_CONFIG),
-                Triple("web_dav_setting", R.xml.pref_config_backup, ConfigTag.BACKUP_CONFIG),
-                Triple("coverConfig", R.xml.pref_config_cover, ConfigTag.COVER_CONFIG),
-                Triple("ai_setting", R.xml.pref_config_ai, ConfigTag.AI_CONFIG),
-                Triple("setting", R.xml.pref_config_other, ConfigTag.OTHER_CONFIG),
-                Triple("setting", R.xml.pref_config_read, ConfigTag.OTHER_CONFIG),
-                Triple(
-                    "setting",
-                    R.xml.pref_config_discovery_subscription,
-                    ConfigTag.DISCOVERY_SUBSCRIPTION_CONFIG
-                )
-            ).flatMap { (ownerKey, xmlRes, ownerConfigTag) ->
+            return subSearchSources.flatMap { (ownerKey, xmlRes, ownerConfigTag) ->
                 buildPreferenceXmlSearchItems(ownerKey, xmlRes, ownerConfigTag)
             }
         }
@@ -326,16 +336,112 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
             return items
         }
 
-        private fun updateSearchSummary(preference: Preference, matchedItems: List<SubSearchItem>) {
+        private fun updateSearchSummary(preference: Preference) {
             val key = preference.key ?: return
             if (!originalSummaries.containsKey(key)) {
                 originalSummaries[key] = preference.summary
             }
-            preference.summary = if (matchedItems.isEmpty()) {
-                originalSummaries[key]
-            } else {
-                matchedItems.first().title
+            preference.summary = originalSummaries[key]
+        }
+
+        private fun showSubSearchResults(root: PreferenceGroup, keyword: String) {
+            val matchedItems = subSearchItems
+                .filter { it.searchText.contains(keyword) }
+                .distinctBy { "${it.ownerConfigTag}:${it.key}:${it.title}" }
+            if (matchedItems.isEmpty()) {
+                return
             }
+            matchedItems.mapTo(hashSetOf()) { it.ownerKey }.forEach { ownerKey ->
+                findPreference<Preference>(ownerKey)?.isVisible = false
+            }
+            val groups = ArrayList<androidx.preference.PreferenceCategory>()
+            val resultPreferences = ArrayList<Pair<PreferenceGroup, Preference>>()
+            var resultIndex = 0
+            matchedItems
+                .groupBy { it.ownerGroupTitle(root) }
+                .forEach { (groupTitle, items) ->
+                    val group = findRootGroupByTitle(root, groupTitle) ?: run {
+                        io.legado.app.lib.prefs.PreferenceCategory(requireContext()).apply {
+                            key = "$SUB_SEARCH_GROUP_KEY:${groups.size}"
+                            title = groupTitle
+                            order = Int.MIN_VALUE + groups.size
+                            isIconSpaceReserved = false
+                        }.also {
+                            groups.add(it)
+                            root.addPreference(it)
+                        }
+                    }
+                    group.isVisible = true
+                    items.forEach { item ->
+                        val resultKey = "$SUB_SEARCH_ITEM_KEY_PREFIX$resultIndex"
+                        visibleSubSearchItems[resultKey] = item
+                        val resultPreference =
+                            io.legado.app.lib.prefs.Preference(requireContext()).apply {
+                                key = resultKey
+                                title = item.ownerTitle()
+                                summary = item.title
+                                order = resultIndex
+                                isIconSpaceReserved = false
+                            }
+                        group.addPreference(resultPreference)
+                        resultPreferences.add(group to resultPreference)
+                        resultIndex++
+                    }
+                }
+            subSearchGroups = groups
+            subSearchResultPreferences = resultPreferences
+        }
+
+        private fun removeSubSearchGroup(root: PreferenceGroup) {
+            subSearchResultPreferences.forEach { (group, preference) ->
+                group.removePreference(preference)
+            }
+            subSearchGroups.forEach { root.removePreference(it) }
+            var index = 0
+            while (true) {
+                val group = root.findPreference<Preference>("$SUB_SEARCH_GROUP_KEY:$index")
+                    ?: break
+                root.removePreference(group)
+                index++
+            }
+            subSearchGroups = emptyList()
+            subSearchResultPreferences = emptyList()
+        }
+
+        private fun SubSearchItem.ownerTitle(): String {
+            return findPreference<Preference>(ownerKey)?.title?.toString().orEmpty()
+        }
+
+        private fun SubSearchItem.ownerGroupTitle(root: PreferenceGroup): String {
+            return findParentGroupTitle(root, ownerKey).orEmpty()
+                .ifBlank { "二级搜索结果" }
+        }
+
+        private fun findParentGroupTitle(group: PreferenceGroup, targetKey: String): String? {
+            for (index in 0 until group.preferenceCount) {
+                val preference = group.getPreference(index)
+                if (preference.key == targetKey) {
+                    return if (group == preferenceScreen) null else group.title?.toString()
+                }
+                if (preference is PreferenceGroup) {
+                    val title = findParentGroupTitle(preference, targetKey)
+                    if (title != null) return title
+                }
+            }
+            return null
+        }
+
+        private fun findRootGroupByTitle(
+            root: PreferenceGroup,
+            title: String
+        ): PreferenceGroup? {
+            for (index in 0 until root.preferenceCount) {
+                val preference = root.getPreference(index)
+                if (preference is PreferenceGroup && preference.title?.toString() == title) {
+                    return preference
+                }
+            }
+            return null
         }
 
         private fun restoreMainSummaries(group: PreferenceGroup) {
@@ -365,18 +471,14 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         }
 
         override fun onPreferenceTreeClick(preference: Preference): Boolean {
-            if (activeSearchKeyword.isNotBlank()) {
-                ownerMatchedSubItems[preference.key.orEmpty()]
-                    ?.firstOrNull()
-                    ?.let { item ->
-                        item.ownerConfigTag?.let { configTag ->
-                            startActivity<ConfigActivity> {
-                                putExtra("configTag", configTag)
-                                putExtra("targetKey", item.key)
-                            }
-                            return true
-                        }
+            visibleSubSearchItems[preference.key.orEmpty()]?.let { item ->
+                item.ownerConfigTag?.let { configTag ->
+                    startActivity<ConfigActivity> {
+                        putExtra("configTag", configTag)
+                        putExtra("targetKey", item.key)
                     }
+                    return true
+                }
             }
             when (preference.key) {
                 "bookSourceManage" -> startActivity<BookSourceActivity>()
@@ -421,5 +523,10 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         }
 
 
+    }
+
+    companion object {
+        private const val SUB_SEARCH_GROUP_KEY = "subSearchResults"
+        private const val SUB_SEARCH_ITEM_KEY_PREFIX = "subSearchResult:"
     }
 }

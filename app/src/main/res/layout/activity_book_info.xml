@@ -20,7 +20,6 @@
         android:id="@+id/vw_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#50000000"
         android:clipChildren="false"
         android:clipToPadding="false">
 
@@ -28,7 +27,6 @@
             android:id="@+id/title_bar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            app:themeMode="dark"
             app:title="@string/book_info"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -63,15 +61,6 @@
                     android:paddingTop="16dp"
                     android:paddingEnd="16dp"
                     android:paddingBottom="12dp">
-
-                    <io.legado.app.ui.widget.image.ArcView
-                        android:id="@+id/arc_view"
-                        android:layout_width="0dp"
-                        android:layout_height="0dp"
-                        android:visibility="gone"
-                        app:arcDirectionTop="true"
-                        app:arcHeight="0dp"
-                        app:bgColor="@color/background" />
 
                     <LinearLayout
                         android:id="@+id/ll_detail_panel"
@@ -412,19 +401,6 @@
                             android:textColor="@color/tv_text_summary"
                             android:textSize="14sp" />
 
-                        <TextView
-                            android:id="@+id/tv_tab_info"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:visibility="gone"
-                            android:background="@drawable/bg_bookshelf_tag_item"
-                            android:gravity="center"
-                            android:includeFontPadding="false"
-                            android:text="@string/book_info_tab_info"
-                            android:textColor="@color/tv_text_summary"
-                            android:textSize="14sp" />
-
                     </LinearLayout>
 
                     <LinearLayout
@@ -515,12 +491,6 @@
             </io.legado.app.ui.widget.NoChildScrollNestedScrollView>
 
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1px"
-            android:background="@color/transparent"
-            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/fl_action"

@@ -46,8 +46,6 @@ import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
-import io.legado.app.constant.PreferKey
-import io.legado.app.constant.Theme
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
@@ -70,6 +68,7 @@ import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
@@ -83,12 +82,10 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
-import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.lib.theme.uiTypeface
-import io.legado.app.model.BookCover
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.audio.AudioPlayActivity
@@ -119,7 +116,6 @@ import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.find
 import io.legado.app.utils.gone
-import io.legado.app.utils.getPrefString
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.longToastOnUi
 import io.legado.app.utils.observeEvent
@@ -133,6 +129,7 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
+import io.legado.app.utils.windowSize
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.html.HtmlPlugin
@@ -143,7 +140,10 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 class BookInfoActivity :
-    VMBaseActivity<ActivityBookInfoBinding, BookInfoViewModel>(toolBarTheme = Theme.Dark, showOpenMenuIcon = false),
+    VMBaseActivity<ActivityBookInfoBinding, BookInfoViewModel>(
+        imageBg = false,
+        showOpenMenuIcon = false
+    ),
     GroupSelectDialog.CallBack,
     ChangeBookSourceDialog.CallBack,
     ChangeCoverDialog.CallBack,
@@ -303,9 +303,11 @@ class BookInfoActivity :
 
     @SuppressLint("PrivateResource")
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.setBackgroundResource(R.color.transparent)
+        binding.titleBar.setBackgroundColor(Color.TRANSPARENT)
+        binding.titleBar.toolbar.setBackgroundColor(Color.TRANSPARENT)
+        binding.titleBar.setTextColor(primaryTextColor)
+        binding.titleBar.setColorFilter(primaryTextColor)
         binding.refreshLayout?.setColorSchemeColors(accentColor)
-        binding.arcView?.setBgColor(backgroundColor)
         binding.llInfo.setBackgroundResource(R.color.transparent)
         binding.ivCoverC.setCardBackgroundColor(Color.TRANSPARENT)
         applyUiCorners()
@@ -343,7 +345,7 @@ class BookInfoActivity :
         listOfNotNull(llDetailPanel, llInfoPage, llDetailContentPanel).forEach {
             it.background = UiCorner.rounded(panelColor, UiCorner.panelRadius(this@BookInfoActivity))
         }
-        listOfNotNull(tvTabIntro, tvTabToc, tvTabInfo, tvIntroToggle).forEach {
+        listOfNotNull(tvTabIntro, tvTabToc, tvIntroToggle).forEach {
             it.background = UiCorner.actionSelector(
                 transparent,
                 menuColor,
@@ -368,7 +370,6 @@ class BookInfoActivity :
             tvName,
             tvTabIntro,
             tvTabToc,
-            tvTabInfo,
             tvToc,
             tvIntroToggle
         ).forEach {
@@ -927,15 +928,11 @@ class BookInfoActivity :
 
     private fun applyBookInfoBackground() {
         binding.bgBook.setImageDrawable(null)
-        binding.bgBook.setBackgroundColor(backgroundColor)
+        binding.bgBook.setBackgroundColor(ThemeConfig.getFallbackBackgroundColor(this))
         if (AppConfig.isEInkMode) return
-        val detailBg = getPrefString(
-            if (AppConfig.isNightTheme) PreferKey.bookInfoBgImageN else PreferKey.bookInfoBgImage
+        binding.bgBook.setImageDrawable(
+            ThemeConfig.getBookInfoBgImage(this, windowManager.windowSize)
         )
-        if (!detailBg.isNullOrBlank()) {
-            BookCover.loadBlur(this, detailBg, false, null)
-                .into(binding.bgBook)
-        }
     }
 
     private fun upLoading(isLoading: Boolean, chapterList: List<BookChapter>? = null) {

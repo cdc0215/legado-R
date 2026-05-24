@@ -546,6 +546,8 @@
     <string name="please_grant_storage_permission">請給於存儲權限</string>
     <string name="fast_rewind">減速</string>
     <string name="fast_forward">加速</string>
+    <string name="rewind_15_seconds">後退 15 秒</string>
+    <string name="forward_15_seconds">快進 15 秒</string>
     <string name="skip_previous">上一個</string>
     <string name="skip_next">下一個</string>
     <string name="music">音樂</string>

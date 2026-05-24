@@ -590,6 +590,8 @@
     <string name="please_grant_storage_permission">Please grant Storage Permission</string>
     <string name="fast_rewind">Speed down</string>
     <string name="fast_forward">Speed up</string>
+    <string name="rewind_15_seconds">Rewind 15 seconds</string>
+    <string name="forward_15_seconds">Forward 15 seconds</string>
     <string name="skip_previous">Prior</string>
     <string name="skip_next">Next</string>
     <string name="music">Music</string>
@@ -1879,8 +1881,10 @@
     <string name="theme_color_bottom_background">Bottom bar color</string>
     <string name="theme_image_main_background">Main background</string>
     <string name="theme_image_book_info_background">Book detail background</string>
-    <string name="theme_image_blur">Background image blur</string>
+    <string name="theme_image_blur">Main background blur</string>
+    <string name="theme_image_book_info_blur">Book detail background blur</string>
     <string name="theme_image_select">Select image</string>
+    <string name="theme_image_replace">Replace image</string>
     <string name="theme_image_delete">Delete image</string>
     <string name="theme_image_value_unselected">Not selected</string>
     <string name="theme_image_value_unselected_blur">Not selected · blur %d</string>

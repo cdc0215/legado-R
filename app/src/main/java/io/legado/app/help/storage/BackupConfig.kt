@@ -90,6 +90,7 @@ object BackupConfig {
         PreferKey.bgImage,
         PreferKey.bgImageBlurring,
         PreferKey.bookInfoBgImage,
+        PreferKey.bookInfoBgImageBlurring,
         PreferKey.uiCornerScale,
         PreferKey.uiLayoutAlpha,
         PreferKey.uiCornerSearchFollow,
@@ -102,6 +103,7 @@ object BackupConfig {
         PreferKey.bgImageN,
         PreferKey.bgImageNBlurring,
         PreferKey.bookInfoBgImageN,
+        PreferKey.bookInfoBgImageNBlurring,
         PreferKey.tNavBarN
     )
 

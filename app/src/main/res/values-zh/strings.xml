@@ -591,6 +591,8 @@
     <string name="please_grant_storage_permission">请给予存储权限</string>
     <string name="fast_rewind">减速</string>
     <string name="fast_forward">加速</string>
+    <string name="rewind_15_seconds">后退 15 秒</string>
+    <string name="forward_15_seconds">快进 15 秒</string>
     <string name="skip_previous">上一个</string>
     <string name="skip_next">下一个</string>
     <string name="music">音乐</string>
@@ -1760,8 +1762,10 @@
     <string name="theme_color_bottom_background">底栏色</string>
     <string name="theme_image_main_background">主界面背景</string>
     <string name="theme_image_book_info_background">详情页背景</string>
-    <string name="theme_image_blur">背景图片模糊</string>
+    <string name="theme_image_blur">主界面背景模糊</string>
+    <string name="theme_image_book_info_blur">详情页背景模糊</string>
     <string name="theme_image_select">选择图片</string>
+    <string name="theme_image_replace">替换图片</string>
     <string name="theme_image_delete">删除图片</string>
     <string name="theme_image_value_unselected">未选择</string>
     <string name="theme_image_value_unselected_blur">未选择 · 模糊 %d</string>

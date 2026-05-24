@@ -55,14 +55,21 @@ import kotlin.math.max
 class BooksFragment() : BaseFragment(R.layout.fragment_books),
     BaseBooksAdapter.CallBack {
 
-    constructor(position: Int, group: BookGroup, secondaryGroupId: Long) : this() {
+    constructor(
+        position: Int,
+        group: BookGroup,
+        secondaryGroupId: Long,
+        bookSort: Int,
+        enableRefresh: Boolean,
+        onlyUpdateRead: Boolean
+    ) : this() {
         val bundle = Bundle()
         bundle.putInt("position", position)
         bundle.putLong("groupId", group.groupId)
         bundle.putLong("secondaryGroupId", secondaryGroupId)
-        bundle.putInt("bookSort", group.getRealBookSort())
-        bundle.putBoolean("enableRefresh", group.enableRefresh)
-        bundle.putBoolean("onlyUpdateRead", group.onlyUpdateRead)
+        bundle.putInt("bookSort", bookSort)
+        bundle.putBoolean("enableRefresh", enableRefresh)
+        bundle.putBoolean("onlyUpdateRead", onlyUpdateRead)
         arguments = bundle
     }
 
@@ -116,7 +123,7 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
 
     private fun initRecyclerView() {
         binding.rvBookshelf.setEdgeEffectColor(primaryColor)
-        binding.rvBookshelf.clipToPadding = true
+        binding.rvBookshelf.clipToPadding = false
         binding.rvBookshelf.applyMainBottomBarPadding(
             usePaddingForRecyclerView = true
         )
@@ -222,6 +229,11 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
     fun setEnableRefresh(enable: Boolean) {
         enableRefresh = enable
         binding.refreshLayout.isEnabled = enable
+    }
+
+    fun setOnlyUpdateRead(onlyRead: Boolean) {
+        onlyUpdateRead = onlyRead
+        arguments?.putBoolean("onlyUpdateRead", onlyRead)
     }
 
     fun setSecondaryGroupFilter(groupId: Long) {

@@ -83,6 +83,10 @@ class AudioPlayActivity :
     private var oldLyric: String? = null
     private var menuCustomBtn: MenuItem? = null
 
+    companion object {
+        private const val SEEK_STEP = 15_000
+    }
+
     private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
         it?.let {
             if (it[0] != AudioPlay.book?.durChapterIndex
@@ -244,11 +248,24 @@ class AudioPlayActivity :
         binding.ivSkipPrevious.setOnClickListener {
             AudioPlay.prev()
         }
+        binding.ivRewind15?.setOnClickListener {
+            adjustProgressBy(-SEEK_STEP)
+        }
+        binding.ivForward15?.setOnClickListener {
+            adjustProgressBy(SEEK_STEP)
+        }
         binding.ivChapter.setOnClickListener {
             AudioPlay.book?.let {
                 tocActivityResult.launch(it.bookUrl)
             }
         }
+    }
+
+    private fun adjustProgressBy(offset: Int) {
+        val progress = binding.playerProgress.progress
+        val target = (progress + offset).coerceIn(0, binding.playerProgress.max)
+        binding.playerProgress.progress = target
+        AudioPlay.adjustProgress(target)
     }
 
     private fun showAudioCacheRangeDialog(book: Book) {

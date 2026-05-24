@@ -9,6 +9,8 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.EventBus
 import io.legado.app.databinding.ActivityConfigBinding
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.book.read.config.MoreConfigDialog
+import io.legado.app.ui.book.read.config.ReadAloudConfigDialog
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -30,6 +32,14 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
                 replaceFragment(configTag, DiscoverySubscriptionConfigFragment::class.java)
             ConfigTag.DISCOVERY_CONFIG -> replaceFragment(configTag, DiscoveryConfigFragment::class.java)
             ConfigTag.SUBSCRIPTION_CONFIG -> replaceFragment(configTag, SubscriptionConfigFragment::class.java)
+            ConfigTag.READ_CONFIG -> {
+                setTitle(R.string.read_config)
+                replaceFragment(configTag, MoreConfigDialog.ReadPreferenceFragment::class.java)
+            }
+            ConfigTag.ALOUD_CONFIG -> {
+                setTitle(R.string.aloud_config)
+                replaceFragment(configTag, ReadAloudConfigDialog.ReadAloudPreferenceFragment::class.java)
+            }
             else -> finish()
         }
     }

@@ -18,9 +18,15 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
     private val activities: MutableList<WeakReference<Activity>> = arrayListOf()
     private val services: MutableList<WeakReference<BaseService>> = arrayListOf()
     private var appFinishedListener: (() -> Unit)? = null
+    @Volatile
+    private var startedActivityCount = 0
 
     fun activitySize(): Int {
         return activities.size
+    }
+
+    fun isAppVisible(): Boolean {
+        return startedActivityCount > 0
     }
 
     /**
@@ -67,6 +73,7 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStarted(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onStart")
+        startedActivityCount++
     }
 
     override fun onActivityDestroyed(activity: Activity) {
@@ -88,6 +95,7 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStopped(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onStop")
+        startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {

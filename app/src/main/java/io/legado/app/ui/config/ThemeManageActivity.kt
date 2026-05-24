@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
+import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -26,6 +27,7 @@ import io.legado.app.databinding.DialogImageBlurringBinding
 import io.legado.app.databinding.DialogThemePackageEditBinding
 import io.legado.app.databinding.ItemThemePackageOptionBinding
 import io.legado.app.databinding.ItemThemePackageBinding
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
@@ -54,6 +56,7 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.ImageCropHelper
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.getCompatColor
@@ -62,6 +65,7 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.removePref
 import io.legado.app.utils.showDialogFragment
@@ -93,6 +97,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var pendingBlur = 0
     private var pendingMainBackgroundPath: String? = null
     private var pendingBookInfoBackgroundPath: String? = null
+    private var pendingBookInfoBackgroundBlur = ThemeConfig.DEFAULT_BOOK_INFO_BACKGROUND_BLUR
     private var pendingUiCornerScale = 1f
     private var pendingUiLayoutAlpha = 100
     private var pendingFontScale = 0
@@ -123,10 +128,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         if (java.io.File(result).exists()) {
             if (request.requestCode == requestMainBackground) {
                 pendingMainBackgroundPath = result
-                editDialogBinding?.let { binding -> updateImageRow(binding.rowMainBackground, true) }
+                editDialogBinding?.let { binding -> updateImageRow(binding.rowMainBackground, pendingMainBackgroundPath) }
             } else {
                 pendingBookInfoBackgroundPath = result
-                editDialogBinding?.let { binding -> updateImageRow(binding.rowBookInfoBackground, false) }
+                editDialogBinding?.let { binding -> updateImageRow(binding.rowBookInfoBackground, pendingBookInfoBackgroundPath) }
             }
         } else {
             toastOnUi(getString(R.string.image_crop_failed, getString(R.string.unknown)))
@@ -157,6 +162,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             loadThemes()
         }
         flushPendingRemoteSyncTasks()
+    }
+
+    override fun observeLiveBus() {
+        observeEvent<String>(EventBus.RECREATE) {
+            recreate()
+        }
     }
 
     private fun initView() = binding.run {
@@ -339,6 +350,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         pendingMainBackgroundPath = current.backgroundImgPath
         pendingBookInfoBackgroundPath = current.bookInfoBackgroundImgPath
         pendingBlur = current.backgroundImgBlur
+        pendingBookInfoBackgroundBlur = current.bookInfoBackgroundBlur()
         pendingUiCornerScale = current.uiCornerScale ?: AppConfig.uiCornerScale
         pendingUiLayoutAlpha = current.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha
         pendingFontScale = current.fontScale ?: getPrefInt(PreferKey.fontScale, 0)
@@ -355,8 +367,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             setupColorRow(rowBackground, R.string.theme_color_background, current.backgroundColor, colorBackground)
             setupColorRow(rowBottomBackground, R.string.theme_color_bottom_background, current.bottomBackground, colorBottomBackground)
             setupImageRow(rowMainBackground, R.string.theme_image_main_background, true)
+            setupBackgroundBlurRow(rowBackgroundBlur, R.string.theme_image_blur, isMain = true)
             setupImageRow(rowBookInfoBackground, R.string.theme_image_book_info_background, false)
-            setupBlankRow(rowImageBlank1)
+            setupBackgroundBlurRow(rowBookInfoBackgroundBlur, R.string.theme_image_book_info_blur, isMain = false)
             setupBlankRow(rowImageBlank2)
             setupInterfaceRows(this)
             setupBlankRow(rowFontBlank)
@@ -457,8 +470,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             binding.rowBackground.tvTitle,
             binding.rowBottomBackground.tvTitle,
             binding.rowMainBackground.tvTitle,
+            binding.rowBackgroundBlur.tvTitle,
             binding.rowBookInfoBackground.tvTitle,
-            binding.rowImageBlank1.tvTitle,
+            binding.rowBookInfoBackgroundBlur.tvTitle,
             binding.rowImageBlank2.tvTitle,
             binding.rowCornerScale.tvTitle,
             binding.rowLayoutAlpha.tvTitle,
@@ -476,6 +490,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupCornerScaleRow(row: ItemThemePackageOptionBinding) {
         row.tvTitle.text = getString(R.string.ui_corner_scale)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.INVISIBLE
         row.tvValue.text = pendingUiCornerScale.toScaleText()
         row.root.setOnClickListener {
@@ -497,6 +512,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupLayoutAlphaRow(row: ItemThemePackageOptionBinding) {
         row.tvTitle.text = getString(R.string.ui_layout_alpha)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.INVISIBLE
         row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingUiLayoutAlpha)
         row.root.setOnClickListener {
@@ -518,6 +534,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupFontScaleRow(row: ItemThemePackageOptionBinding) {
         row.tvTitle.text = getString(R.string.font_scale)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.INVISIBLE
         row.tvValue.text = if (pendingFontScale == 0) {
             getString(R.string.btn_default_s)
@@ -545,6 +562,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupUiFontRow(row: ItemThemePackageOptionBinding) {
         row.tvTitle.text = getString(R.string.ui_font)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.INVISIBLE
         row.tvValue.text = uiFontDisplayName(pendingUiFontPath)
         row.root.setOnClickListener {
@@ -555,6 +573,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupTitleFontRow(row: ItemThemePackageOptionBinding) {
         row.tvTitle.text = getString(R.string.title_font)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.INVISIBLE
         row.tvValue.text = uiFontDisplayName(pendingTitleFontPath)
         row.root.setOnClickListener {
@@ -565,6 +584,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupSwitchRow(row: ItemThemePackageOptionBinding, titleRes: Int, onClick: () -> Unit) {
         row.tvTitle.text = getString(titleRes)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.INVISIBLE
         row.root.setOnClickListener { onClick() }
     }
@@ -575,6 +595,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupBlankRow(row: ItemThemePackageOptionBinding) {
         row.tvTitle.text = "     "
+        row.tvValue.visibility = View.VISIBLE
         row.tvValue.text = ""
         row.viewSwatch.visibility = View.INVISIBLE
         row.root.isClickable = false
@@ -589,7 +610,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         target: Int
     ) {
         row.tvTitle.text = getString(titleRes)
+        row.tvValue.visibility = View.VISIBLE
         row.viewSwatch.visibility = View.VISIBLE
+        row.viewSwatch.setImageDrawable(null)
         row.tvValue.text = normalizeColor(colorText).uppercase(Locale.ROOT)
         updateSwatch(row, normalizeColor(colorText).toColorInt())
         row.root.setOnClickListener {
@@ -613,58 +636,98 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun setupImageRow(row: ItemThemePackageOptionBinding, titleRes: Int, isMain: Boolean) {
         row.tvTitle.text = getString(titleRes)
-        row.viewSwatch.visibility = View.INVISIBLE
-        updateImageRow(row, isMain)
+        row.tvValue.visibility = View.GONE
+        row.viewSwatch.updateLayoutParams<ViewGroup.LayoutParams> {
+            width = 38.dpToPx()
+            height = 28.dpToPx()
+        }
+        updateImageRow(row, if (isMain) pendingMainBackgroundPath else pendingBookInfoBackgroundPath)
         row.root.setOnClickListener {
-            showImageActions(isMain)
+            val path = if (isMain) pendingMainBackgroundPath else pendingBookInfoBackgroundPath
+            if (path.isNullOrBlank()) {
+                selectThemeImage(isMain)
+            } else {
+                showImageSelectedActions(isMain)
+            }
+        }
+        row.root.setOnLongClickListener {
+            clearThemeImage(isMain)
+            true
         }
     }
 
-    private fun updateImageRow(row: ItemThemePackageOptionBinding, isMain: Boolean) {
-        val path = if (isMain) pendingMainBackgroundPath else pendingBookInfoBackgroundPath
-        row.tvValue.text = when {
-            path.isNullOrBlank() && isMain -> getString(R.string.theme_image_value_unselected_blur, pendingBlur)
-            path.isNullOrBlank() -> getString(R.string.theme_image_value_unselected)
-            isMain -> getString(R.string.theme_image_value_file_blur, File(path).name, pendingBlur)
-            else -> File(path).name
+    private fun updateImageRow(row: ItemThemePackageOptionBinding, path: String?) {
+        Glide.with(row.viewSwatch).clear(row.viewSwatch)
+        row.tvValue.text = ""
+        if (path.isNullOrBlank()) {
+            row.viewSwatch.visibility = View.INVISIBLE
+            row.viewSwatch.setImageDrawable(null)
+        } else {
+            row.viewSwatch.visibility = View.VISIBLE
+            val signature = path.takeIf { !it.startsWith("http", ignoreCase = true) }
+                ?.let {
+                    val file = File(it)
+                    if (file.exists()) ObjectKey("${file.absolutePath}:${file.length()}:${file.lastModified()}") else null
+                }
+            val request = ImageLoader.load(row.viewSwatch.context, path)
+                .centerCrop()
+                .error(ColorDrawable(Color.TRANSPARENT))
+            if (signature != null) {
+                request.signature(signature)
+            }
+            request.into(row.viewSwatch)
         }
     }
 
-    private fun showImageActions(isMain: Boolean) {
-        val hasImage = if (isMain) !pendingMainBackgroundPath.isNullOrBlank() else !pendingBookInfoBackgroundPath.isNullOrBlank()
-        val actions = buildList {
-            if (isMain) add(ThemeImageAction.BLUR)
-            add(ThemeImageAction.SELECT)
-            if (hasImage) add(ThemeImageAction.DELETE)
-        }
+    private fun showImageSelectedActions(isMain: Boolean) {
         selector(
             getString(if (isMain) R.string.theme_image_main_background else R.string.theme_image_book_info_background),
-            actions.map { getString(it.titleRes) }
+            listOf(getString(R.string.theme_image_replace), getString(R.string.theme_image_delete))
         ) { _, index ->
-            when (actions[index]) {
-                ThemeImageAction.BLUR -> showBlurDialog()
-                ThemeImageAction.SELECT -> selectImage.launch {
-                    requestCode = if (isMain) requestMainBackground else requestBookInfoBackground
-                    mode = HandleFileContract.IMAGE
-                }
-                ThemeImageAction.DELETE -> {
-                    if (isMain) {
-                        pendingMainBackgroundPath = null
-                        editDialogBinding?.let { updateImageRow(it.rowMainBackground, true) }
-                    } else {
-                        pendingBookInfoBackgroundPath = null
-                        editDialogBinding?.let { updateImageRow(it.rowBookInfoBackground, false) }
-                    }
-                }
+            when (index) {
+                0 -> selectThemeImage(isMain)
+                1 -> clearThemeImage(isMain)
             }
         }
     }
 
-    private fun showBlurDialog() {
-        alert(R.string.theme_image_blur) {
+    private fun selectThemeImage(isMain: Boolean) {
+        selectImage.launch {
+            requestCode = if (isMain) requestMainBackground else requestBookInfoBackground
+            mode = HandleFileContract.IMAGE
+        }
+    }
+
+    private fun clearThemeImage(isMain: Boolean) {
+        if (isMain) {
+            pendingMainBackgroundPath = null
+            editDialogBinding?.let { updateImageRow(it.rowMainBackground, pendingMainBackgroundPath) }
+        } else {
+            pendingBookInfoBackgroundPath = null
+            editDialogBinding?.let { updateImageRow(it.rowBookInfoBackground, pendingBookInfoBackgroundPath) }
+        }
+    }
+
+    private fun setupBackgroundBlurRow(row: ItemThemePackageOptionBinding, titleRes: Int, isMain: Boolean) {
+        row.tvTitle.text = getString(titleRes)
+        row.tvValue.visibility = View.VISIBLE
+        row.viewSwatch.visibility = View.INVISIBLE
+        updateBackgroundBlurRow(row, isMain)
+        row.root.setOnClickListener {
+            showBlurDialog(isMain)
+        }
+    }
+
+    private fun updateBackgroundBlurRow(row: ItemThemePackageOptionBinding, isMain: Boolean) {
+        row.tvValue.text = (if (isMain) pendingBlur else pendingBookInfoBackgroundBlur).toString()
+    }
+
+    private fun showBlurDialog(isMain: Boolean) {
+        alert(if (isMain) R.string.theme_image_blur else R.string.theme_image_book_info_blur) {
+            val initialBlur = if (isMain) pendingBlur else pendingBookInfoBackgroundBlur
             val blurBinding = DialogImageBlurringBinding.inflate(layoutInflater).apply {
-                seekBar.progress = pendingBlur
-                textViewValue.text = pendingBlur.toString()
+                seekBar.progress = initialBlur
+                textViewValue.text = initialBlur.toString()
                 seekBar.setOnSeekBarChangeListener(object : SeekBarChangeListener {
                     override fun onProgressChanged(
                         seekBar: android.widget.SeekBar,
@@ -677,8 +740,13 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }
             customView { blurBinding.root }
             okButton {
-                pendingBlur = blurBinding.seekBar.progress.coerceIn(0, 25)
-                editDialogBinding?.let { updateImageRow(it.rowMainBackground, true) }
+                if (isMain) {
+                    pendingBlur = blurBinding.seekBar.progress.coerceIn(0, 25)
+                    editDialogBinding?.let { updateBackgroundBlurRow(it.rowBackgroundBlur, true) }
+                } else {
+                    pendingBookInfoBackgroundBlur = blurBinding.seekBar.progress.coerceIn(0, 25)
+                    editDialogBinding?.let { updateBackgroundBlurRow(it.rowBookInfoBackgroundBlur, false) }
+                }
             }
             cancelButton()
         }
@@ -702,6 +770,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 backgroundImgPath = pendingMainBackgroundPath,
                 backgroundImgBlur = pendingBlur,
                 bookInfoBackgroundImgPath = pendingBookInfoBackgroundPath,
+                bookInfoBackgroundImgBlur = pendingBookInfoBackgroundBlur,
                 uiCornerScale = pendingUiCornerScale,
                 uiLayoutAlpha = pendingUiLayoutAlpha,
                 uiCornerSearchFollow = pendingUiCornerSearchFollow,
@@ -794,6 +863,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             backgroundImgPath = getPrefString(if (isNightTheme) PreferKey.bgImageN else PreferKey.bgImage),
             backgroundImgBlur = getPrefInt(if (isNightTheme) PreferKey.bgImageNBlurring else PreferKey.bgImageBlurring, 0),
             bookInfoBackgroundImgPath = getPrefString(if (isNightTheme) PreferKey.bookInfoBgImageN else PreferKey.bookInfoBgImage),
+            bookInfoBackgroundImgBlur = getPrefInt(
+                if (isNightTheme) PreferKey.bookInfoBgImageNBlurring else PreferKey.bookInfoBgImageBlurring,
+                ThemeConfig.DEFAULT_BOOK_INFO_BACKGROUND_BLUR
+            ),
             uiCornerScale = AppConfig.uiCornerScale,
             uiLayoutAlpha = AppConfig.uiLayoutAlpha,
             uiCornerSearchFollow = AppConfig.uiCornerSearchFollow,
@@ -1331,12 +1404,6 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         IMAGE,
         INTERFACE,
         FONT
-    }
-
-    private enum class ThemeImageAction(val titleRes: Int) {
-        BLUR(R.string.theme_image_blur),
-        SELECT(R.string.theme_image_select),
-        DELETE(R.string.theme_image_delete)
     }
 
     private data class RemoteSyncTask(

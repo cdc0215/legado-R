@@ -183,9 +183,12 @@ object BookCover {
         path: String?,
         loadOnlyWifi: Boolean = false,
         sourceOrigin: String? = null,
+        blurRadius: Int = 12,
     ): RequestBuilder<Drawable> {
-        val loadBlur = ImageLoader.load(context, defaultDrawable)
-            .transform(BlurTransformation(12), CenterCrop())
+        val radius = blurRadius.coerceIn(0, 25)
+        val loadBlur = ImageLoader.load(context, defaultDrawable).run {
+            if (radius > 0) transform(BlurTransformation(radius), CenterCrop()) else transform(CenterCrop())
+        }
         if (AppConfig.useDefaultCover) {
             return loadBlur
         }
@@ -198,7 +201,9 @@ object BookCover {
         }
         return ImageLoader.load(context, path)
             .apply(options)
-            .transform(BlurTransformation(12), CenterCrop())
+            .run {
+                if (radius > 0) transform(BlurTransformation(radius), CenterCrop()) else transform(CenterCrop())
+            }
             .transition(DrawableTransitionOptions.withCrossFade(300))
             .thumbnail(loadBlur)
     }

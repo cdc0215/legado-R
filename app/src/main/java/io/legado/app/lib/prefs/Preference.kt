@@ -23,7 +23,7 @@ import io.legado.app.utils.ColorUtils
 import splitties.views.onLongClick
 import kotlin.math.roundToInt
 
-open class Preference(context: Context, attrs: AttributeSet) :
+open class Preference(context: Context, attrs: AttributeSet? = null) :
     androidx.preference.Preference(context, attrs) {
 
     private var onLongClick: ((preference: Preference) -> Boolean)? = null

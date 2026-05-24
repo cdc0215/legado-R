@@ -118,6 +118,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                 override fun onPageSelected(position: Int) {
                     val secondaryGroupId = secondaryGroupIds.getOrNull(position) ?: return
                     selectedSecondaryGroupId = secondaryGroupId
+                    updateOnlyUpdateRead()
                     binding.tabLayout.setSelectedIndex(position, smooth = true)
                 }
             }
@@ -226,6 +227,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private fun selectSecondaryGroup(secondaryGroupId: Long, smooth: Boolean) {
         val index = secondaryGroupIds.indexOf(secondaryGroupId).takeIf { it >= 0 } ?: return
         selectedSecondaryGroupId = secondaryGroupId
+        updateOnlyUpdateRead()
         binding.tabLayout.setSelectedIndex(index, smooth = smooth)
         binding.viewPagerBookshelf.setCurrentItem(index, smooth)
     }
@@ -273,13 +275,15 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     private fun switchToPrimaryGroup(index: Int) {
         if (index !in primaryGroups.indices) return
+        val lastSecondaryGroupId = selectedSecondaryGroupId
         currentGroupIndex = index
         AppConfig.saveTabPosition = index
-        onlyUpdateRead = selectedPrimaryGroup?.onlyUpdateRead ?: false
         fragmentMap.clear()
         adapter.notifyDataSetChanged()
         renderSecondaryGroups()
-        selectSecondaryGroup(firstSecondaryGroupId(), smooth = false)
+        val targetSecondaryGroupId = lastSecondaryGroupId.takeIf { it in secondaryGroupIds }
+            ?: firstSecondaryGroupId()
+        selectSecondaryGroup(targetSecondaryGroupId, smooth = false)
         updateHeaderTitle()
     }
 
@@ -329,6 +333,26 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         return data.filterNot { it.groupId in BookGroup.primaryGroupIds }
     }
 
+    private fun secondaryGroup(groupId: Long): BookGroup? {
+        return secondaryGroups.firstOrNull { it.groupId == groupId }
+    }
+
+    private fun enableRefreshForSecondaryGroup(groupId: Long): Boolean {
+        return secondaryGroup(groupId)?.enableRefresh ?: true
+    }
+
+    private fun onlyUpdateReadForSecondaryGroup(groupId: Long): Boolean {
+        return secondaryGroup(groupId)?.onlyUpdateRead ?: false
+    }
+
+    private fun bookSortForSecondaryGroup(groupId: Long): Int {
+        return secondaryGroup(groupId)?.getRealBookSort() ?: AppConfig.bookshelfSort
+    }
+
+    private fun updateOnlyUpdateRead() {
+        onlyUpdateRead = onlyUpdateReadForSecondaryGroup(selectedSecondaryGroupId)
+    }
+
     private fun Book.isInSecondaryGroup(groupId: Long, userGroupIds: Long): Boolean {
         return when (groupId) {
             BookGroup.IdAll -> true
@@ -373,8 +397,9 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             ) {
                 return POSITION_NONE
             }
-            val bookSort = primaryGroup.getRealBookSort()
-            fragment.setEnableRefresh(primaryGroup.enableRefresh)
+            val bookSort = bookSortForSecondaryGroup(fragment.secondaryGroupId)
+            fragment.setEnableRefresh(enableRefreshForSecondaryGroup(fragment.secondaryGroupId))
+            fragment.setOnlyUpdateRead(onlyUpdateReadForSecondaryGroup(fragment.secondaryGroupId))
             if (fragment.bookSort != bookSort) {
                 fragment.upBookSort(bookSort)
             }
@@ -384,8 +409,17 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         override fun getItem(position: Int): Fragment {
             val group = selectedPrimaryGroup ?: defaultPrimaryGroup(BookGroup.IdPrimaryAll)
             val secondaryGroupId = secondaryGroupIds.getOrNull(position) ?: BookGroup.IdAll
-            onlyUpdateRead = group.onlyUpdateRead
-            return BooksFragment(position, group, secondaryGroupId)
+            if (secondaryGroupId == selectedSecondaryGroupId) {
+                updateOnlyUpdateRead()
+            }
+            return BooksFragment(
+                position,
+                group,
+                secondaryGroupId,
+                bookSortForSecondaryGroup(secondaryGroupId),
+                enableRefreshForSecondaryGroup(secondaryGroupId),
+                onlyUpdateReadForSecondaryGroup(secondaryGroupId)
+            )
         }
 
         override fun getCount(): Int {

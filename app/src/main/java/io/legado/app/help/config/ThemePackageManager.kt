@@ -343,8 +343,7 @@ object ThemePackageManager {
     ): ThemeConfig.Config {
         val background = copyAsset(config.backgroundImgPath, dir, mainBackgroundPrefix)
         val bookInfo = copyAsset(
-            config.bookInfoBackgroundImgPath
-                ?: appCtx.getPrefString(if (isNightTheme) PreferKey.bookInfoBgImageN else PreferKey.bookInfoBgImage),
+            config.bookInfoBackgroundImgPath,
             dir,
             bookInfoBackgroundPrefix
         )

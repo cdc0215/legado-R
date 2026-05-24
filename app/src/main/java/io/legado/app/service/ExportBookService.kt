@@ -18,6 +18,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.getExportFileName
@@ -30,6 +31,7 @@ import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.book.cache.CacheActivity
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
+import io.legado.app.utils.ExportImageSanitizer
 import io.legado.app.utils.HtmlFormatter
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.NetworkUtils
@@ -43,6 +45,7 @@ import io.legado.app.utils.find
 import io.legado.app.utils.list
 import io.legado.app.utils.mapAsync
 import io.legado.app.utils.mapAsyncIndexed
+import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.openInputStream
 import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.postEvent
@@ -85,6 +88,16 @@ class ExportBookService : BaseService() {
         val exportProgress = ConcurrentHashMap<String, Int>()
         val exportMsg = ConcurrentHashMap<String, String>()
         private const val EPUB_ASSET_BACKGROUND_PREFIX = "asset://bg/"
+        private const val EXPORT_IMAGE_DIR_NAME_MAX_LENGTH = 80
+        @Volatile
+        private var exportFinishedNotificationVisible = false
+
+        fun clearFinishedNotification() {
+            if (exportFinishedNotificationVisible && exportProgress.isEmpty()) {
+                notificationManager.cancel(NotificationId.ExportBook)
+                exportFinishedNotificationVisible = false
+            }
+        }
     }
 
     data class ExportConfig(
@@ -206,6 +219,7 @@ class ExportBookService : BaseService() {
 
             IntentAction.stop -> {
                 notificationManager.cancel(NotificationId.ExportBook)
+                exportFinishedNotificationVisible = false
                 stopSelf()
             }
         }
@@ -233,6 +247,7 @@ class ExportBookService : BaseService() {
     }
 
     private fun upExportNotification(finish: Boolean = false) {
+        exportFinishedNotificationVisible = finish
         val notification = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_status_bar_r)
             .setSubText(getString(R.string.export_book))
@@ -262,8 +277,7 @@ class ExportBookService : BaseService() {
         exportJob = lifecycleScope.launch(IO) {
             while (isActive) {
                 val (bookUrl, exportConfig) = waitExportBooks.entries.firstOrNull() ?: let {
-                    notificationContentText = "导出完成"
-                    upExportNotification(true)
+                    finishExportNotification()
                     stopSelf()
                     return@launch
                 }
@@ -294,6 +308,16 @@ class ExportBookService : BaseService() {
                     postEvent(EventBus.EXPORT_BOOK, bookUrl)
                 }
             }
+        }
+    }
+
+    private fun finishExportNotification() {
+        notificationContentText = "导出完成"
+        if (LifecycleHelp.isAppVisible()) {
+            exportFinishedNotificationVisible = false
+            notificationManager.cancel(NotificationId.ExportBook)
+        } else {
+            upExportNotification(true)
         }
     }
 
@@ -336,14 +360,18 @@ class ExportBookService : BaseService() {
                 srcList?.forEach {
                     val vFile = BookHelp.getImage(book, it.src)
                     if (vFile.exists()) {
-                        fileDoc.createFileIfNotExist(
-                            "${it.index}-${MD5Utils.md5Encode16(it.src)}.jpg",
-                            subDirs = arrayOf(
-                                "${book.name}_${book.author}",
-                                "images",
-                                it.chapterTitle
-                            )
-                        ).writeFile(vFile)
+                        kotlin.runCatching {
+                            fileDoc.createFileIfNotExist(
+                                "${it.index}-${MD5Utils.md5Encode16(it.src)}.jpg",
+                                subDirs = arrayOf(
+                                    "${book.name}_${book.author}".toExportImageDirName("book"),
+                                    "images",
+                                    it.chapterTitle.toExportImageDirName("chapter_${it.index}")
+                                )
+                            ).writeFile(vFile)
+                        }.onFailure { e ->
+                            AppLog.put("导出图片文件失败: ${book.name} ${it.chapterTitle}", e)
+                        }
                     }
                 }
             }
@@ -408,6 +436,7 @@ class ExportBookService : BaseService() {
                 chineseConvert = false,
                 reSegment = false
             ).toString()
+            .let(ExportImageSanitizer::cleanSvgUrlOptionImages)
         if (config.pictureFile) {
             //txt导出图片文件
             val srcList = arrayListOf<SrcData>()
@@ -415,7 +444,11 @@ class ExportBookService : BaseService() {
                 val matcher = AppPattern.imgPattern.matcher(text)
                 while (matcher.find()) {
                     matcher.group(1)?.let {
-                        val src = NetworkUtils.getAbsoluteURL(chapter.url, it)
+                        val imageSrc = ExportImageSanitizer.normalizeSrc(it)
+                        if (imageSrc.removeTag) {
+                            return@let
+                        }
+                        val src = NetworkUtils.getAbsoluteURL(chapter.url, imageSrc.src)
                         srcList.add(SrcData(chapter.title, index, src))
                     }
                 }
@@ -428,6 +461,14 @@ class ExportBookService : BaseService() {
 
     private fun String?.withoutReadableContentVersionFlag(): String? {
         return this?.replace(EpubFile.READABLE_CONTENT_VERSION_FLAG, "")
+    }
+
+    private fun String.toExportImageDirName(defaultName: String): String {
+        val name = trim()
+            .normalizeFileName()
+            .trim()
+            .ifBlank { defaultName }
+        return name.take(EXPORT_IMAGE_DIR_NAME_MAX_LENGTH).ifBlank { defaultName }
     }
 
     /**
@@ -896,12 +937,16 @@ class ExportBookService : BaseService() {
     ): Pair<String, ArrayList<Resource>> {
         val data = StringBuilder("")
         val resources = arrayListOf<Resource>()
-        content.split("\n").forEach { text ->
+        ExportImageSanitizer.cleanSvgUrlOptionImages(content).split("\n").forEach { text ->
             var text1 = text
             val matcher = AppPattern.imgPattern.matcher(text)
             while (matcher.find()) {
                 matcher.group(1)?.let {
-                    val src = NetworkUtils.getAbsoluteURL(chapter.url, it)
+                    val imageSrc = ExportImageSanitizer.normalizeSrc(it)
+                    if (imageSrc.removeTag) {
+                        return@let
+                    }
+                    val src = NetworkUtils.getAbsoluteURL(chapter.url, imageSrc.src)
                     val originalHref =
                         "${MD5Utils.md5Encode16(src)}.${BookHelp.getImageSuffix(src)}"
                     val href =
@@ -911,8 +956,10 @@ class ExportBookService : BaseService() {
                     if (vFile.exists()) {
                         val img = LazyResource(fp, href, originalHref)
                         resources.add(img)
+                        text1 = text1.replace(it, "../${href}")
+                    } else if (imageSrc.hasUrlOption) {
+                        text1 = text1.replace(it, imageSrc.src)
                     }
-                    text1 = text1.replace(src, "../${href}")
                 }
             }
             data.append(text1).append("\n")

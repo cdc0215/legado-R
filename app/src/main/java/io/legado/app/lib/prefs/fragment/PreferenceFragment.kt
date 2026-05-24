@@ -11,6 +11,8 @@ import androidx.preference.PreferenceGroup
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceGroupAdapter
+import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.lib.prefs.EditTextPreferenceDialog
 import io.legado.app.lib.prefs.ListPreferenceDialog
 import io.legado.app.lib.prefs.MultiSelectListPreferenceDialog
@@ -27,6 +29,37 @@ abstract class PreferenceFragment : PreferenceFragmentCompat() {
         listView.clipToPadding = false
         listView.applyNavigationBarPadding()
         listView.itemAnimator = null
+        consumeActivityTargetKey()
+    }
+
+    protected fun consumeActivityTargetKey(
+        mapTargetKey: (String) -> String = { it }
+    ): Boolean {
+        val rawTargetKey = activity?.intent?.getStringExtra("targetKey")?.trim().orEmpty()
+        if (rawTargetKey.isBlank()) return false
+        val targetKey = mapTargetKey(rawTargetKey)
+        if (targetKey.isBlank()) return false
+        val preference = findPreference<Preference>(targetKey) ?: return false
+        listView.post {
+            scrollPreferenceToTop(preference)
+            activity?.intent?.removeExtra("targetKey")
+        }
+        return true
+    }
+
+    protected fun scrollPreferenceToTop(preference: Preference) {
+        val adapter = listView.adapter as? PreferenceGroupAdapter
+        if (adapter != null) {
+            for (index in 0 until adapter.itemCount) {
+                if (adapter.getItem(index) == preference) {
+                    (listView.layoutManager as? LinearLayoutManager)
+                        ?.scrollToPositionWithOffset(index, 0)
+                        ?: listView.scrollToPosition(index)
+                    return
+                }
+            }
+        }
+        scrollToPreference(preference)
     }
 
     /**

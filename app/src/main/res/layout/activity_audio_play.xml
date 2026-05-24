@@ -98,35 +98,86 @@
         android:id="@+id/ll_player_progress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         app:layout_constraintBottom_toTopOf="@+id/ll_play_menu">
 
-        <TextView
-            android:id="@+id/tv_dur_time"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="00:00"
-            android:textColor="@color/md_white_1000"
-            tools:ignore="HardcodedText,RtlSymmetry,TextContrastCheck" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <io.legado.app.lib.theme.view.ThemeSeekBar
-            android:id="@+id/player_progress"
-            android:layout_width="0dp"
-            android:layout_height="25dp"
-            android:layout_gravity="center_vertical"
-            android:layout_weight="1"
-            android:progressBackgroundTint="@color/md_dark_secondary" />
+            <io.legado.app.ui.widget.image.ImageButton
+                android:id="@+id/iv_rewind_15"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/selector_circle_btn_bg"
+                android:contentDescription="@string/rewind_15_seconds"
+                android:padding="7dp"
+                android:src="@drawable/ic_replay_15"
+                app:tint="@color/md_white_1000"
+                tools:ignore="ImageContrastCheck" />
 
-        <TextView
-            android:id="@+id/tv_all_time"
-            android:layout_width="wrap_content"
+            <io.legado.app.lib.theme.view.ThemeSeekBar
+                android:id="@+id/player_progress"
+                android:layout_width="0dp"
+                android:layout_height="25dp"
+                android:layout_gravity="center_vertical"
+                android:layout_weight="1"
+                android:progressBackgroundTint="@color/md_dark_secondary" />
+
+            <io.legado.app.ui.widget.image.ImageButton
+                android:id="@+id/iv_forward_15"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/selector_circle_btn_bg"
+                android:contentDescription="@string/forward_15_seconds"
+                android:padding="7dp"
+                android:src="@drawable/ic_forward_15"
+                app:tint="@color/md_white_1000"
+                tools:ignore="ImageContrastCheck" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="00:00"
-            android:textColor="@color/md_white_1000"
-            tools:ignore="HardcodedText,TextContrastCheck" />
+            android:orientation="horizontal">
+
+            <Space
+                android:layout_width="36dp"
+                android:layout_height="1dp" />
+
+            <TextView
+                android:id="@+id/tv_dur_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="@color/md_white_1000"
+                android:textSize="10sp"
+                tools:ignore="HardcodedText,RtlSymmetry,TextContrastCheck" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_all_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="@color/md_white_1000"
+                android:textSize="10sp"
+                tools:ignore="HardcodedText,TextContrastCheck" />
+
+            <Space
+                android:layout_width="36dp"
+                android:layout_height="1dp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

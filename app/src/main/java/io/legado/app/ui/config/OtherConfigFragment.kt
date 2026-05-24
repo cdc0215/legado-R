@@ -407,19 +407,7 @@ class OtherConfigFragment : PreferenceFragment(),
 
     private fun consumeTargetKey() {
         if (targetKeyHandled) return
-        val targetKey = activity?.intent?.getStringExtra("targetKey")?.trim().orEmpty()
-        if (targetKey.isBlank()) return
-        val preference = findPreference<Preference>(targetKey) ?: return
-        targetKeyHandled = true
-        listView.post {
-            scrollToPreference(preference)
-            if (preference is SwitchPreferenceCompat) {
-                preference.isChecked = !preference.isChecked
-            } else {
-                onPreferenceTreeClick(preference)
-            }
-            activity?.intent?.removeExtra("targetKey")
-        }
+        targetKeyHandled = consumeActivityTargetKey()
     }
 
 }

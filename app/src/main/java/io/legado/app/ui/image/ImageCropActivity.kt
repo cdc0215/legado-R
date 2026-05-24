@@ -26,6 +26,7 @@ import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.ImageProcessUtils
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
@@ -79,6 +80,7 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
         binding.cropOverlay.setAspect(aspectWidth, aspectHeight)
         binding.photoView.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
         binding.photoView.setMaxScale(6f)
+        binding.actionBar.applyNavigationBarPadding(withInitialPadding = true)
         binding.btnCancel.setOnClickListener { finish() }
         binding.btnConfirm.setOnClickListener { saveCrop() }
         binding.cropOverlay.post {

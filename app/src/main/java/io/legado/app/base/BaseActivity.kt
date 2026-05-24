@@ -27,6 +27,7 @@ import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypeface
 import io.legado.app.lib.theme.applyUiMenuTypefaceDeep
+import io.legado.app.service.ExportBookService
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyMenuScrollIndicators
@@ -115,6 +116,7 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     override fun onResume() {
         super.onResume()
+        ExportBookService.clearFinishedNotification()
         applyPreferredRefreshRate()
         refreshThemeBackgroundIfChanged()
     }

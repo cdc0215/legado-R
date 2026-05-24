@@ -24,11 +24,12 @@
         android:textSize="14sp"
         tools:text="" />
 
-    <View
+    <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/view_swatch"
         android:layout_width="22dp"
         android:layout_height="22dp"
         android:layout_marginStart="10dp"
+        android:scaleType="centerCrop"
         android:visibility="invisible" />
 
     <TextView

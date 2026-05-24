@@ -150,11 +150,15 @@
                 layout="@layout/item_theme_package_option" />
 
             <include
+                android:id="@+id/row_background_blur"
+                layout="@layout/item_theme_package_option" />
+
+            <include
                 android:id="@+id/row_book_info_background"
                 layout="@layout/item_theme_package_option" />
 
             <include
-                android:id="@+id/row_image_blank_1"
+                android:id="@+id/row_book_info_background_blur"
                 layout="@layout/item_theme_package_option" />
 
             <include
