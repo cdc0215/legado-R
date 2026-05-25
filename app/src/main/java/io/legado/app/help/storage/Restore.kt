@@ -498,6 +498,7 @@ object Restore {
         if (!sourceDir.exists() || !sourceDir.isDirectory) return
         val targetDir = ThemePackageManager.rootDir
         kotlin.runCatching {
+            BackupThemePackageDedupe.restoreThemePackageFonts(File(path))
             FileUtils.delete(targetDir, deleteRootDir = true)
             copyDir(sourceDir, targetDir)
         }.onFailure {

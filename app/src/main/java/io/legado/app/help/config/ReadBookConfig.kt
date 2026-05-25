@@ -50,12 +50,13 @@ object ReadBookConfig {
     private var needSaveConfigList = false
     private var needSaveSanitizedConfig = false
     var durConfig
-        get() = activeConfig?.also { it.sanitize() } ?: getConfig(styleSelect).copy().also {
-            it.sanitize()
+        get() = activeConfig ?: getConfig(styleSelect).copy().also {
             activeConfig = it
         }
         set(value) {
-            value.sanitize()
+            if (value.sanitize()) {
+                needSaveSanitizedConfig = true
+            }
             activeConfig = value
             if (shareLayout) {
                 shareConfig = value
@@ -278,9 +279,6 @@ object ReadBookConfig {
     }
 
     fun upBg(width: Int, height: Int) {
-        if (durConfig.sanitize()) {
-            save()
-        }
         val drawable = durConfig.curBgDrawable(width, height)
         if (drawable is BitmapDrawable && drawable.bitmap != null) {
             bgMeanColor = drawable.bitmap.getMeanColor()

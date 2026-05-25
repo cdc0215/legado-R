@@ -249,7 +249,13 @@ object Backup {
         backgroundAssetDirNames.forEach { dirName ->
             paths.add(appCtx.externalFiles.getFile(dirName).absolutePath)
         }
-        paths.add(ThemePackageManager.rootDir.absolutePath)
+        BackupThemePackageDedupe.prepareBackupThemePackages(
+            sourceRoot = ThemePackageManager.rootDir,
+            backupRoot = File(backupPath)
+        )?.let {
+            paths.add(it.absolutePath)
+            paths.add(File(backupPath, BackupThemePackageDedupe.manifestFileName).absolutePath)
+        }
         paths.add(NavigationBarIconConfig.rootDir.absolutePath)
         FileUtils.delete(zipFilePath)
         FileUtils.delete(zipFilePath.replace("tmp_", ""))

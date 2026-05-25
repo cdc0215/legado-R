@@ -152,10 +152,11 @@ class ReadView(context: Context, attrs: AttributeSet) :
         pageDelegate?.setViewSize(w, h)
         if (w > 0 && h > 0) {
             upBg()
-            post {
-                upStyle()
-                upContent(resetPageOffset = false)
-                invalidate()
+            if (oldw > 0 && oldh > 0 && (w != oldw || h != oldh)) {
+                post {
+                    upContent(resetPageOffset = false)
+                    invalidate()
+                }
             }
             callBack.upSystemUiVisibility()
         }
