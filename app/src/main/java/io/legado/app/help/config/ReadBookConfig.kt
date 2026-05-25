@@ -26,6 +26,7 @@ import io.legado.app.utils.getMeanColor
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.hexString
+import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
@@ -876,20 +877,33 @@ object ReadBookConfig {
             }
 
             fun normalizeFontPath() {
-                if (textFont.isBlank() || !textFont.contains(File.separator)) {
+                if (textFont.isBlank()) {
                     return
                 }
-                val localPath = FileUtils.getPath(appCtx.externalFiles, "font", FileUtils.getName(textFont))
-                when {
-                    FileUtils.exist(localPath) && textFont != localPath -> {
-                        textFont = localPath
-                        changed = true
-                    }
-
-                    !textFont.startsWith(appCtx.externalFiles.absolutePath) || !FileUtils.exist(textFont) -> {
+                if (textFont.isContentScheme()) {
+                    val canRead = runCatching {
+                        appCtx.contentResolver.openFileDescriptor(textFont.toUri(), "r")?.use { true } == true
+                    }.getOrDefault(false)
+                    if (!canRead) {
                         textFont = ""
                         changed = true
                     }
+                    return
+                }
+
+                val normalizedPath = if (textFont.contains(File.separator)) {
+                    textFont
+                } else {
+                    FileUtils.getPath(appCtx.externalFiles, "font", FileUtils.getName(textFont))
+                }
+                if (FileUtils.exist(normalizedPath)) {
+                    if (textFont != normalizedPath) {
+                        textFont = normalizedPath
+                        changed = true
+                    }
+                } else {
+                    textFont = ""
+                    changed = true
                 }
             }
 
