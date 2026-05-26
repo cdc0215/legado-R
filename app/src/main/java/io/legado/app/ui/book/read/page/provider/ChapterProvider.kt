@@ -184,7 +184,7 @@ object ChapterProvider {
 //            reviewPaint.textAlign = Paint.Align.CENTER
         }
         //间距
-        lineSpacingExtra = ReadBookConfig.lineSpacingExtra.coerceAtLeast(10) / 10f
+        lineSpacingExtra = ReadBookConfig.lineSpacingExtra.coerceIn(0, 20) / 10f
         paragraphSpacing = ReadBookConfig.paragraphSpacing.coerceAtLeast(0)
         titleTopSpacing = ReadBookConfig.titleTopSpacing.dpToPx()
         titleBottomSpacing = ReadBookConfig.titleBottomSpacing.dpToPx()

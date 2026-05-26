@@ -5,6 +5,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import androidx.annotation.Keep
 import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PageAnim
@@ -43,21 +44,28 @@ import androidx.core.graphics.drawable.toDrawable
 object ReadBookConfig {
     const val configFileName = "readConfig.json"
     const val shareConfigFileName = "shareReadConfig.json"
+    private const val activeReadConfigFileName = "activeReadConfig.json"
+    private const val activeComicConfigFileName = "activeComicConfig.json"
     val configFilePath = FileUtils.getPath(appCtx.filesDir, configFileName)
     val shareConfigFilePath = FileUtils.getPath(appCtx.filesDir, shareConfigFileName)
+    private val activeReadConfigFilePath = FileUtils.getPath(appCtx.filesDir, activeReadConfigFileName)
+    private val activeComicConfigFilePath = FileUtils.getPath(appCtx.filesDir, activeComicConfigFileName)
     val configList: ArrayList<Config> = arrayListOf()
     lateinit var shareConfig: Config
     private var activeConfig: Config? = null
+        set(value) {
+            if (value?.sanitize() == true) {
+                needSaveSanitizedConfig = true
+            }
+            field = value
+        }
     private var needSaveConfigList = false
     private var needSaveSanitizedConfig = false
     var durConfig
-        get() = activeConfig ?: getConfig(styleSelect).copy().also {
+        get() = activeConfig ?: (loadActiveConfig(styleSelect) ?: getConfig(styleSelect).copy()).also {
             activeConfig = it
         }
         set(value) {
-            if (value.sanitize()) {
-                needSaveSanitizedConfig = true
-            }
             activeConfig = value
             if (shareLayout) {
                 shareConfig = value
@@ -90,11 +98,7 @@ object ReadBookConfig {
         return if (isBuiltInStyleIndex(normalizedIndex)) {
             DefaultData.readConfigs[normalizedIndex]
         } else {
-            configList[customIndex(normalizedIndex)].also { config ->
-                if (config.sanitize()) {
-                    needSaveSanitizedConfig = true
-                }
-            }
+            configList[customIndex(normalizedIndex)]
         }
     }
 
@@ -161,7 +165,7 @@ object ReadBookConfig {
         val normalizedConfigs = normalizeCustomConfigs(configs)
         configList.clear()
         configList.addAll(normalizedConfigs)
-        activeConfig = null
+        activeConfig = loadActiveConfig(styleSelect)
     }
 
     fun initShareConfig() {
@@ -176,9 +180,6 @@ object ReadBookConfig {
             }
         }
         shareConfig = c ?: getConfig(5).copy()
-        if (shareConfig.sanitize()) {
-            needSaveSanitizedConfig = true
-        }
         if (needSaveConfigList || needSaveSanitizedConfig) {
             needSaveConfigList = false
             needSaveSanitizedConfig = false
@@ -188,19 +189,6 @@ object ReadBookConfig {
 
     fun repairConfigIfNeeded(): Boolean {
         var changed = false
-        configList.forEach { config ->
-            if (config.sanitize()) {
-                changed = true
-            }
-        }
-        if (this::shareConfig.isInitialized && shareConfig.sanitize()) {
-            changed = true
-        }
-        activeConfig?.let { config ->
-            if (config.sanitize()) {
-                changed = true
-            }
-        }
         val normalizedReadStyle = normalizeStyleIndex(readStyleSelect)
         if (readStyleSelect != normalizedReadStyle) {
             readStyleSelect = normalizedReadStyle
@@ -296,6 +284,8 @@ object ReadBookConfig {
     }
 
     fun save() {
+        val activeConfigFilePath = if (isComic) activeComicConfigFilePath else activeReadConfigFilePath
+        val activeConfigState = ActiveConfigState(styleSelect, durConfig.copy())
         Coroutine.async {
             synchronized(this) {
                 GSON.toJson(configList).let {
@@ -305,6 +295,10 @@ object ReadBookConfig {
                 GSON.toJson(shareConfig).let {
                     FileUtils.delete(shareConfigFilePath)
                     FileUtils.createFileIfNotExist(shareConfigFilePath).writeText(it)
+                }
+                GSON.toJson(activeConfigState).let {
+                    FileUtils.delete(activeConfigFilePath)
+                    FileUtils.createFileIfNotExist(activeConfigFilePath).writeText(it)
                 }
             }
         }
@@ -356,14 +350,13 @@ object ReadBookConfig {
     }
 
     fun resetActiveConfig() {
-        activeConfig = getConfig(styleSelect).copy().also { it.sanitize() }
+        activeConfig = loadActiveConfig(styleSelect) ?: getConfig(styleSelect).copy()
         if (shareLayout) {
             shareConfig = activeConfig ?: shareConfig
         }
     }
 
     fun setActiveConfig(config: Config, selectedIndex: Int = styleSelect) {
-        config.sanitize()
         styleSelect = selectedIndex
         activeConfig = config
         if (shareLayout) {
@@ -402,7 +395,27 @@ object ReadBookConfig {
         activeConfig = null
         readStyleSelect = normalizeStyleIndex(readStyleSelect)
         comicStyleSelect = normalizeStyleIndex(comicStyleSelect)
+        FileUtils.delete(activeReadConfigFilePath)
+        FileUtils.delete(activeComicConfigFilePath)
         save()
+    }
+
+    private fun loadActiveConfig(selectedIndex: Int): Config? {
+        val activeConfigFilePath = if (isComic) activeComicConfigFilePath else activeReadConfigFilePath
+        val configFile = File(activeConfigFilePath)
+        if (!configFile.exists()) {
+            return null
+        }
+        return try {
+            val state = GSON.fromJsonObject<ActiveConfigState>(configFile.readText()).getOrThrow()
+            if (state.styleIndex != normalizeStyleIndex(selectedIndex)) {
+                return null
+            }
+            state.config
+        } catch (e: Exception) {
+            AppLog.put("读取当前排版配置出错", e)
+            null
+        }
     }
 
     //配置写入读取
@@ -759,9 +772,14 @@ object ReadBookConfig {
         }
         config.curTextColor()
         config.curTextAccentColor()
-        config.sanitize()
         return config
     }
+
+    @Keep
+    data class ActiveConfigState(
+        val styleIndex: Int = 0,
+        val config: Config = Config()
+    )
 
     @Keep
     data class Config(
@@ -925,7 +943,7 @@ object ReadBookConfig {
             updateInt(textBold, textBold.coerceIn(0, 2)) { textBold = it }
             updateInt(textSize, textSize.coerceIn(5, 50)) { textSize = it }
             updateFloat(letterSpacing, letterSpacing.coerceIn(-0.5f, 0.5f)) { letterSpacing = it }
-            updateInt(lineSpacingExtra, lineSpacingExtra.coerceIn(10, 20)) { lineSpacingExtra = it }
+            updateInt(lineSpacingExtra, lineSpacingExtra.coerceIn(0, 20)) { lineSpacingExtra = it }
             updateInt(paragraphSpacing, paragraphSpacing.coerceIn(0, 20)) { paragraphSpacing = it }
             updateInt(paperInkStrength, paperInkStrength.coerceIn(0, 100)) { paperInkStrength = it }
             updateInt(titleMode, titleMode.coerceIn(0, AdvancedTitleConfig.TITLE_MODE_ADVANCED)) {

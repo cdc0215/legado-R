@@ -1,6 +1,7 @@
 package io.legado.app.service
 
 import android.app.PendingIntent
+import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.lifecycleScope
@@ -30,6 +31,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     private var ttsInitGeneration = 0
     private var retryParagraphKey: String? = null
     private var retryingTtsInit = false
+    private var ttsVoiceName: String? = null
 
     @Volatile
     private var activeUtteranceId: String? = null
@@ -47,7 +49,7 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        clearTTS()
+        clearTTS(forgetVoice = true)
     }
 
     @Synchronized
@@ -65,10 +67,13 @@ class TTSReadAloudService : BaseReadAloudService() {
     }
 
     @Synchronized
-    fun clearTTS() {
+    fun clearTTS(forgetVoice: Boolean = false) {
         activeUtteranceId = null
         speakGeneration++
         ttsInitGeneration++
+        if (forgetVoice) {
+            ttsVoiceName = null
+        }
         textToSpeech?.runCatching {
             stop()
             shutdown()
@@ -83,6 +88,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         }
         if (status == TextToSpeech.SUCCESS) {
             textToSpeech?.let {
+                restoreOrRememberVoice(it)
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
                 ttsInitFinish = true
                 play()
@@ -93,6 +99,25 @@ class TTSReadAloudService : BaseReadAloudService() {
             activeUtteranceId = null
             toastOnUi(R.string.tts_init_failed)
             pauseReadAloud(false)
+        }
+    }
+
+    private fun restoreOrRememberVoice(tts: TextToSpeech) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return
+        }
+        val voiceName = ttsVoiceName
+        if (!voiceName.isNullOrBlank()) {
+            val voice = tts.voices?.firstOrNull { it.name == voiceName }
+            if (voice != null && tts.voice?.name != voiceName) {
+                if (tts.setVoice(voice) != TextToSpeech.SUCCESS) {
+                    AppLog.putDebug("restore tts voice failed:$voiceName")
+                }
+            }
+            return
+        }
+        tts.voice?.name?.takeIf { it.isNotBlank() }?.let {
+            ttsVoiceName = it
         }
     }
 
@@ -198,7 +223,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     override fun upSpeechRate(reset: Boolean) {
         if (AppConfig.ttsFlowSys) {
             if (reset) {
-                clearTTS()
+                clearTTS(forgetVoice = true)
                 initTts()
             }
         } else {

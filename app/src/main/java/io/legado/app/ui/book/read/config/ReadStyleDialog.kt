@@ -1135,24 +1135,36 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             val configFile = configDir.getFile("readConfig.json")
             configFile.createFileReplace()
             val config = targetConfig.copy()
+            val exportNames = linkedSetOf(configFile.name)
+            val copiedBgNames = hashMapOf<String, String>()
             val fontPath = config.textFont
             if (fontPath.isNotEmpty()) {
                 val fontDoc = FileDoc.fromFile(fontPath)
-                val fontName = fontDoc.name
                 fontDoc.openInputStream().getOrNull()?.use {
+                    val fontName = uniqueExportName(fontDoc.name, exportNames)
                     val fontExportFile = FileUtils.createFileIfNotExist(configDir, fontName)
                     fontExportFile.outputStream().use { out -> it.copyTo(out) }
                     config.textFont = fontName
                     exportFiles.add(fontExportFile)
                 }
             }
-            configFile.writeText(GSON.toJson(config))
-            exportFiles.add(configFile)
             repeat(3) {
                 val path = targetConfig.getBgPath(it) ?: return@repeat
-                val bgExportFile = copyBgImage(path, configDir) ?: return@repeat
+                val bgExportFile = copyBgImage(
+                    path = path,
+                    configDir = configDir,
+                    exportNames = exportNames,
+                    copiedBgNames = copiedBgNames
+                ) ?: return@repeat
+                when (it) {
+                    0 -> config.bgStr = bgExportFile.name
+                    1 -> config.bgStrNight = bgExportFile.name
+                    2 -> config.bgStrEInk = bgExportFile.name
+                }
                 exportFiles.add(bgExportFile)
             }
+            configFile.writeText(GSON.toJson(config))
+            exportFiles.add(configFile)
             val configZipPath = FileUtils.getPath(requireContext().externalCache, configFileName)
             if (ZipUtils.zipFiles(exportFiles, File(configZipPath))) {
                 val exportDir = FileDoc.fromDir(uri)
@@ -1170,17 +1182,35 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         }
     }
 
-    private fun copyBgImage(path: String, configDir: File): File? {
-        val bgName = FileUtils.getName(path)
+    private fun copyBgImage(
+        path: String,
+        configDir: File,
+        exportNames: MutableSet<String>,
+        copiedBgNames: MutableMap<String, String>
+    ): File? {
         val bgFile = File(path)
         if (bgFile.exists()) {
+            val sourceKey = runCatching { bgFile.canonicalPath }.getOrDefault(bgFile.absolutePath)
+            copiedBgNames[sourceKey]?.let { return configDir.getFile(it) }
+            val bgName = uniqueExportName(FileUtils.getName(path), exportNames)
             val bgExportFile = File(FileUtils.getPath(configDir, bgName))
-            if (!bgExportFile.exists()) {
-                bgFile.copyTo(bgExportFile)
-            }
+            bgFile.copyTo(bgExportFile)
+            copiedBgNames[sourceKey] = bgName
             return bgExportFile
         }
         return null
+    }
+
+    private fun uniqueExportName(name: String, exportNames: MutableSet<String>): String {
+        var candidate = name
+        val dotIndex = name.lastIndexOf('.').takeIf { it > 0 }
+        val baseName = if (dotIndex == null) name else name.substring(0, dotIndex)
+        val extension = if (dotIndex == null) "" else name.substring(dotIndex)
+        var index = 1
+        while (!exportNames.add(candidate)) {
+            candidate = "${baseName}_${index++}$extension"
+        }
+        return candidate
     }
 
     @SuppressLint("InflateParams")

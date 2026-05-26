@@ -366,7 +366,8 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
                 exportFiles.add(bgExportFile)
             }
             val configZipPath = FileUtils.getPath(requireContext().externalCache, configFileName)
-            if (ZipUtils.zipFiles(exportFiles, File(configZipPath))) {
+            val uniqueExportFiles = exportFiles.distinctBy { it.name }
+            if (ZipUtils.zipFiles(uniqueExportFiles, File(configZipPath))) {
                 val exportDir = FileDoc.fromDir(uri)
                 exportDir.find(exportFileName)?.delete()
                 val exportFileDoc = exportDir.createFileIfNotExist(exportFileName)
