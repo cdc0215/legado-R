@@ -92,6 +92,7 @@ import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setHuaweiDisplayCutoutShortEdgesCompat
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.setStatusBarColorAuto
+import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -193,6 +194,37 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         } else {
             showMainStatusBar()
         }
+    }
+
+    override fun upNavigationBarColor() {
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.S_V2) {
+            super.upNavigationBarColor()
+            return
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        window.decorView.systemUiVisibility =
+            window.decorView.systemUiVisibility or
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = Color.TRANSPARENT
+        }
+        
+        val opacity = NavigationBarIconConfig.currentEntry(AppConfig.isNightTheme)
+            .config
+            .opacity
+            .coerceIn(0, 100) / 100f
+        val baseColor = if (AppConfig.immNavigationBar) {
+            ThemeStore.navigationBarColor(this)
+        } else {
+            AppColorUtils.darkenColor(ThemeStore.navigationBarColor(this))
+        }
+        setNavigationBarColorAuto(AppColorUtils.withAlpha(baseColor, opacity))
     }
 
     private fun hideMainStatusBar() {
@@ -439,6 +471,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
         bottomNavigationConfigSignature = signature
         NavigationBarIconConfig.applyCurrentBottomConfig(AppConfig.isNightTheme)
+        upNavigationBarColor()
         applyBottomNavigationIcons()
         applyBottomLayoutMode()
         scheduleLiquidGlassSetup()

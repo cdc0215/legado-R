@@ -408,7 +408,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         autoPageStop()
         backupJob?.cancel()
         ReadBook.upReadTime(forceWidgetUpdate = true)
-        ReadBook.saveRead()
+        ReadBook.saveReadNow()
         ReadBook.cancelPreDownloadTask()
         unregisterReceiver(timeBatteryReceiver)
         upSystemUiVisibility()
@@ -1917,6 +1917,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         backupJob = lifecycleScope.launch(IO) {
             delay(300000)
             ReadBook.book?.let {
+                ReadBook.saveReadNow()
                 AppWebDav.uploadBookProgress(it)
                 ensureActive()
                 it.update()

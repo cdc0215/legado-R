@@ -132,7 +132,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             ReadBook.upMsg(msg)
             AppLog.put(msg, it)
         }.onFinally {
-            ReadBook.saveRead()
+            ReadBook.saveRead(pageChanged = true, updateProgressTime = false)
         }
     }
 

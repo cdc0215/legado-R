@@ -238,6 +238,7 @@ object PreferKey {
     const val readAloudFloatX = "readAloudFloatX"
     const val readAloudFloatY = "readAloudFloatY"
     const val showLastUpdateTime = "showLastUpdateTime"
+    const val showLocalBookIcon = "showLocalBookIcon"
     const val showWaitUpCount = "showWaitUpCount"
     const val clearWebViewData = "clearWebViewData"
     const val onlyLatestBackup = "onlyLatestBackup"

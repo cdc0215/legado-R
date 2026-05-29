@@ -1339,6 +1339,7 @@
     <string name="check_selected_interval">Select zones</string>
     <string name="show_add_to_shelf_alert_title">Prompt to add to bookshelf when return</string>
     <string name="show_add_to_shelf_alert_summary">Prompt to add to bookshelf when return from reading books that are not on the bookshelf</string>
+    <string name="show_local_book_icon">Show local book icon</string>
     <string name="review">Review</string>
     <string name="rule_avatar">段评发布者头像（avatarRule）</string>
     <string name="rule_review_url">段评URL（reviewUrl）</string>

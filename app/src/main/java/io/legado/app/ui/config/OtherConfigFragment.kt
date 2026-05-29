@@ -269,6 +269,10 @@ class OtherConfigFragment : PreferenceFragment(),
                 onlyUpdateReadPref?.isVisible = isEnabled
             }
 
+            PreferKey.showLocalBookIcon -> {
+                postEvent(EventBus.BOOKSHELF_REFRESH, "")
+            }
+
             PreferKey.highBrush -> {
                 (activity as? BaseActivity<*>)?.applyPreferredRefreshRate()
             }

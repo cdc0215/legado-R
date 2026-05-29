@@ -266,6 +266,7 @@ object ReadBook : CoroutineScope by MainScope() {
     fun uploadProgress(toast: Boolean = false, successAction: (() -> Unit)? = null) {
         book?.let {
             launch(IO) {
+                saveReadNow()
                 AppWebDav.uploadBookProgress(it, toast) {
                     successAction?.invoke()
                 }
@@ -1029,32 +1030,37 @@ object ReadBook : CoroutineScope by MainScope() {
         saveRead()
     }
 
-    fun saveRead(pageChanged: Boolean = false) {
-        val book = book ?: return
+    fun saveRead(pageChanged: Boolean = false, updateProgressTime: Boolean = true) {
         executor.execute {
-            kotlin.runCatching {
-                book.lastCheckCount = 0
-                val durTime = System.currentTimeMillis()
-                book.durChapterTime = durTime
-                val chapterChanged = book.durChapterIndex != durChapterIndex
-                book.durChapterIndex = durChapterIndex
-                book.durChapterPos = durChapterPos
-                if (!pageChanged || chapterChanged) {
-                    appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
-                        book.durChapterTitle = it.getDisplayTitle(
-                            ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
-                            book.getUseReplaceRule(),
-                            replaceBook = book.toReplaceBook()
-                        )
-                        SourceCallBack.callBackBook(SourceCallBack.SAVE_READ, bookSource, book, it, durTime.toString())
-                    }
+            saveReadNow(pageChanged, updateProgressTime)
+        }
+    }
+
+    fun saveReadNow(pageChanged: Boolean = false, updateProgressTime: Boolean = true) {
+        val book = book ?: return
+        kotlin.runCatching {
+            book.lastCheckCount = 0
+            val nowTime = System.currentTimeMillis()
+            val durTime = if (updateProgressTime) nowTime else book.durChapterTime
+            book.durChapterTime = durTime
+            val chapterChanged = book.durChapterIndex != durChapterIndex
+            book.durChapterIndex = durChapterIndex
+            book.durChapterPos = durChapterPos
+            if (!pageChanged || chapterChanged) {
+                appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
+                    book.durChapterTitle = it.getDisplayTitle(
+                        ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
+                        book.getUseReplaceRule(),
+                        replaceBook = book.toReplaceBook()
+                    )
+                    SourceCallBack.callBackBook(SourceCallBack.SAVE_READ, bookSource, book, it, durTime.toString())
                 }
-                book.update()
-                appDb.readRecentBookDao.insert(ReadRecentBook(book.bookUrl, durTime))
-                ReadRecordWidgetStore.updateRecentSnapshot(book, durTime)
-            }.onFailure {
-                AppLog.put("保存书籍阅读进度信息出错\n$it", it)
             }
+            book.update()
+            appDb.readRecentBookDao.insert(ReadRecentBook(book.bookUrl, nowTime))
+            ReadRecordWidgetStore.updateRecentSnapshot(book, nowTime)
+        }.onFailure {
+            AppLog.put("保存书籍阅读进度信息出错\n$it", it)
         }
     }
 

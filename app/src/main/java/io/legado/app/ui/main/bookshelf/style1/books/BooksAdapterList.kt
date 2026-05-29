@@ -38,7 +38,7 @@ class BooksAdapterList(
             tvRead.text = item.durChapterTitle
             tvLast.text = item.latestChapterTitle
             ivCover.loadThumb(item, false, fragment, lifecycle)
-            ivLocal.visible(item.isLocal)
+            ivLocal.visible(AppConfig.showLocalBookIcon && item.isLocal)
             upRefresh(binding, item)
             upLastUpdateTime(binding, item)
         } else {
@@ -59,7 +59,7 @@ class BooksAdapterList(
 
                         "refresh" -> upRefresh(binding, item)
                         "lastUpdateTime" -> upLastUpdateTime(binding, item)
-                        "local" -> ivLocal.visible(item.isLocal)
+                        "local" -> ivLocal.visible(AppConfig.showLocalBookIcon && item.isLocal)
                     }
                 }
             }

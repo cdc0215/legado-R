@@ -225,6 +225,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.showLastUpdateTime, value)
         }
 
+    val showLocalBookIcon: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showLocalBookIcon, false)
+
     var showWaitUpCount: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showWaitUpCount, false)
         set(value) {
