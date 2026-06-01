@@ -1355,6 +1355,7 @@
     <string name="tag_explore_disabled">Flag: found disabled</string>
     <string name="show_read_title_addition">show read title addition area</string>
     <string name="read_bar_style_follow_page">read bar style follow page</string>
+    <string name="bottom_web_view_dialog_height">Paragraph comment page size</string>
     <string name="read_menu_bg">Bottom Panel Background</string>
     <string name="read_menu_alpha">Bottom Panel Opacity</string>
     <string name="read_menu_alpha_summary">Adjust opacity for top/bottom menu panels</string>

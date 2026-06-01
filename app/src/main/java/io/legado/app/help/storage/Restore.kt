@@ -671,6 +671,7 @@ object Restore {
             PreferKey.webDavDeviceName,
             PreferKey.defaultHomePage,
             PreferKey.clickImgWay,
+            PreferKey.bottomWebViewDialogHeight,
             PreferKey.dThemeName,
             PreferKey.dNThemeName,
             PreferKey.bgImage,

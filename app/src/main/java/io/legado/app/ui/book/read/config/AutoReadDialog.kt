@@ -17,7 +17,6 @@ import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.BaseReadBookActivity
-import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -45,11 +44,12 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        (activity as ReadBookActivity).bottomDialog--
+        (activity as? BaseReadBookActivity)?.bottomDialog--
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
-        val bottomDialog = (activity as ReadBookActivity).bottomDialog++
+        val readActivity = activity as? BaseReadBookActivity ?: return@run
+        val bottomDialog = readActivity.bottomDialog++
         if (bottomDialog > 0) {
             dismiss()
             return@run
@@ -118,8 +118,8 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
             dismissAllowingStateLoss()
         }
         binding.llSetting.setOnClickListener {
-            (activity as BaseReadBookActivity).showPageAnimConfig {
-                (activity as ReadBookActivity).upPageAnim()
+            (activity as? BaseReadBookActivity)?.showPageAnimConfig {
+                ReadBook.callBack?.upPageAnim()
                 ReadBook.loadContent(false)
             }
         }

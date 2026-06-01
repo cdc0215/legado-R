@@ -1449,6 +1449,11 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val clickImgWay: String?
         get() = appCtx.getPrefString(PreferKey.clickImgWay)
 
+    val bottomWebViewDialogHeight: Float?
+        get() = appCtx.getPrefString(PreferKey.bottomWebViewDialogHeight, "default")
+            ?.toFloatOrNull()
+            ?.takeIf { it in 0f..1f }
+
     var preDownloadNum
         get() = appCtx.getPrefInt(PreferKey.preDownloadNum, 10)
         set(value) {

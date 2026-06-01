@@ -33,6 +33,14 @@
         <item>平板/横屏双页</item>
     </string-array>
 
+    <string-array name="bottom_web_view_dialog_height_title">
+        <item>默认</item>
+        <item>半屏</item>
+        <item>三分之二屏</item>
+        <item>大屏</item>
+        <item>全屏</item>
+    </string-array>
+
     <string-array name="NavBarColors">
         <item>自动</item>
         <item>黑色</item>

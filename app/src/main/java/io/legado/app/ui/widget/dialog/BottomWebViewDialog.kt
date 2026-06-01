@@ -306,12 +306,16 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                 }
             }
 
-            val dialogHeight = config.dialogHeight ?: if (first) -1 else null
+            val userHeightPercentage = if (first) AppConfig.bottomWebViewDialogHeight else null
+            val configHeightPercentage = userHeightPercentage ?: config.heightPercentage
+            val dialogHeight = config.dialogHeight
+                ?.takeIf { userHeightPercentage == null }
+                ?: if (first && configHeightPercentage == null) -1 else null
             dialogHeight?.let { height ->
                 params.height = height
                 hasChanged = true
             }
-            config.heightPercentage?.let { percentage ->
+            configHeightPercentage?.let { percentage ->
                 if (percentage in 0.0..1.0) {
                     val height = (displayMetrics.heightPixels * percentage).toInt()
                     params.height = height
@@ -536,17 +540,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                     }
                 } ?: run {
                     activity?.runOnUiThread {
-                        bottomSheet?.let { sheet ->
-                            val layoutParams = sheet.layoutParams
-                            layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-                            sheet.layoutParams = layoutParams
-                        }
-                        setLongClickSaveImg()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            currentWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                                behavior?.isDraggable = scrollY == 0
-                            }
-                        }
+                        setConfig(Config(), true)
                     }
                 }
                 val analyzeUrl =
