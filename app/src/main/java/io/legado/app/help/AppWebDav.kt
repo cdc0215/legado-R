@@ -131,12 +131,23 @@ object AppWebDav {
         onDownloadFinish: (() -> Unit)? = null
     ) {
         authorization?.let {
+            downloadBackupToLocal(name, onProgress, onDownloadFinish)
+            Restore.restoreLocked(Backup.backupPath)
+        }
+    }
+
+    @Throws(WebDavException::class)
+    suspend fun downloadBackupToLocal(
+        name: String,
+        onProgress: ProgressListener? = null,
+        onDownloadFinish: (() -> Unit)? = null
+    ) {
+        authorization?.let {
             val webDav = WebDav(rootWebDavUrl + name, it)
             webDav.downloadTo(Backup.zipFilePath, true, onProgress)
             onDownloadFinish?.invoke()
             FileUtils.delete(Backup.backupPath)
             ZipUtils.unZipToPath(File(Backup.zipFilePath), Backup.backupPath)
-            Restore.restoreLocked(Backup.backupPath)
         }
     }
 

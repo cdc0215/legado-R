@@ -140,11 +140,12 @@ object Backup {
     suspend fun backupLocked(
         context: Context,
         path: String?,
-        onWebDavUploadProgress: ProgressListener? = null
+        onWebDavUploadProgress: ProgressListener? = null,
+        targets: Set<String>? = null
     ) {
         mutex.withLock {
             withContext(IO) {
-                backup(context, path, onWebDavUploadProgress)
+                backup(context, path, onWebDavUploadProgress, targets)
             }
         }
     }
@@ -152,7 +153,8 @@ object Backup {
     private suspend fun backup(
         context: Context,
         path: String?,
-        onWebDavUploadProgress: ProgressListener? = null
+        onWebDavUploadProgress: ProgressListener? = null,
+        targets: Set<String>? = null
     ) {
         LogUtils.d(TAG, "开始备份 path:$path")
         LocalConfig.lastBackup = System.currentTimeMillis()
@@ -242,21 +244,29 @@ object Backup {
         }
         currentCoroutineContext().ensureActive()
         val zipFileName = getNowZipFileName()
-        val paths = arrayListOf(*backupFileNames)
+        val paths = backupFileNames
+            .filter { targets.shouldBackupTarget(it) }
+            .toMutableList()
         for (i in 0 until paths.size) {
             paths[i] = backupPath + File.separator + paths[i]
         }
         backgroundAssetDirNames.forEach { dirName ->
-            paths.add(appCtx.externalFiles.getFile(dirName).absolutePath)
+            if (targets.shouldBackupTarget(dirName)) {
+                paths.add(appCtx.externalFiles.getFile(dirName).absolutePath)
+            }
         }
-        BackupThemePackageDedupe.prepareBackupThemePackages(
-            sourceRoot = ThemePackageManager.rootDir,
-            backupRoot = File(backupPath)
-        )?.let {
-            paths.add(it.absolutePath)
-            paths.add(File(backupPath, BackupThemePackageDedupe.manifestFileName).absolutePath)
+        if (targets.shouldBackupTarget(BackupThemePackageDedupe.themePackagesDirName)) {
+            BackupThemePackageDedupe.prepareBackupThemePackages(
+                sourceRoot = ThemePackageManager.rootDir,
+                backupRoot = File(backupPath)
+            )?.let {
+                paths.add(it.absolutePath)
+                paths.add(File(backupPath, BackupThemePackageDedupe.manifestFileName).absolutePath)
+            }
         }
-        paths.add(NavigationBarIconConfig.rootDir.absolutePath)
+        if (targets.shouldBackupTarget(NavigationBarIconConfig.rootDir.name)) {
+            paths.add(NavigationBarIconConfig.rootDir.absolutePath)
+        }
         FileUtils.delete(zipFilePath)
         FileUtils.delete(zipFilePath.replace("tmp_", ""))
         val backupFileName = if (AppConfig.onlyLatestBackup) {
@@ -299,6 +309,10 @@ object Backup {
         }.let {
             AppWebDav.upBgs(it.toTypedArray())
         }
+    }
+
+    private fun Set<String>?.shouldBackupTarget(target: String): Boolean {
+        return this == null || contains(target)
     }
 
     private suspend fun writeListToJson(list: List<Any>, fileName: String, path: String) {

@@ -608,9 +608,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
             appDb.bookDao.getBook(it) ?: appDb.searchBookDao.getSearchBook(it)?.toBook()
         }?.also { b ->
-            chapterInVolumeIndex = b.chapterInVolumeIndex
-            durVolumeIndex = b.durVolumeIndex
             durChapterPos = b.durChapterPos
+            restoreVideoProgress(b)
             source = appDb.bookSourceDao.getBookSource(b.origin)
             SourceCallBack.callBackBook(SourceCallBack.START_READ, source as BookSource?, b, chapter)
             readRecord.deviceId = AppConst.androidId
@@ -636,6 +635,30 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
         }
         return true
+    }
+
+    fun restoreVideoProgress(book: Book) {
+        val toc = toc.orEmpty()
+        if (toc.isEmpty()) {
+            durVolumeIndex = book.durVolumeIndex
+            chapterInVolumeIndex = book.chapterInVolumeIndex
+            return
+        }
+        val targetIndex = book.durChapterIndex.coerceIn(0, toc.lastIndex)
+        if (volumes.isEmpty()) {
+            durVolumeIndex = 0
+            chapterInVolumeIndex = targetIndex
+            return
+        }
+        val exactVolumeIndex = volumes.indexOfFirst { it.index == targetIndex }
+        if (exactVolumeIndex >= 0) {
+            durVolumeIndex = exactVolumeIndex
+            chapterInVolumeIndex = 0
+            return
+        }
+        durVolumeIndex = volumes.indexOfLast { it.index < targetIndex }.coerceAtLeast(0)
+        val volumeIndex = volumes.getOrNull(durVolumeIndex)?.index ?: -1
+        chapterInVolumeIndex = (targetIndex - volumeIndex - 1).coerceAtLeast(0)
     }
 
     fun upEpisodes() {

@@ -475,6 +475,8 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             }
             appDb.bookDao.getBook(book.name, book.author)?.let {
                 book.durChapterIndex = it.durChapterIndex
+                book.durVolumeIndex = it.durVolumeIndex
+                book.chapterInVolumeIndex = it.chapterInVolumeIndex
                 book.durChapterPos = it.durChapterPos
                 book.durChapterTitle = it.durChapterTitle
             }
@@ -530,6 +532,8 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 }
                 appDb.bookDao.getBook(book.name, book.author)?.let {
                     book.durChapterIndex = it.durChapterIndex
+                    book.durVolumeIndex = it.durVolumeIndex
+                    book.chapterInVolumeIndex = it.chapterInVolumeIndex
                     book.durChapterPos = it.durChapterPos
                     book.durChapterTitle = it.durChapterTitle
                 }

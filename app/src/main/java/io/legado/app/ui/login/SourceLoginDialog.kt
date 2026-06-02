@@ -20,7 +20,6 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.databinding.DialogLoginBinding
-import io.legado.app.databinding.ItemSourceEditBinding
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.applyUiToolbarTypeface
 import io.legado.app.lib.theme.primaryColor
@@ -49,12 +48,12 @@ import kotlin.text.lastIndexOf
 import kotlin.text.startsWith
 import kotlin.text.substring
 import android.view.MotionEvent
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatSpinner
 import io.legado.app.data.entities.rule.RowUi.Type
-import io.legado.app.ui.widget.text.TextInputLayout
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.indexOf
 import io.legado.app.utils.setSelectionSafely
@@ -134,14 +133,16 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
             val newLoginInfo: MutableMap<String, String> = mutableMapOf()
             rowUis?.forEachIndexed { index, rowUi ->
                 val default = rowUi.default
-                when (val rowView = binding.root.findViewById<View>(index + 1000)) {
-                    is TextInputLayout -> {
+                val rowView = binding.root.findViewById<View>(index + 1000)
+                val editText = findLoginEditText(rowView)
+                when {
+                    editText != null -> {
                         val value = default ?: ""
                         newLoginInfo[rowUi.name] = value
-                        rowView.editText?.setText(value)
+                        editText.setText(value)
                     }
 
-                    is TextView -> {
+                    rowView is TextView -> {
                         when (rowUi.type) {
                             Type.button -> {
                                 rowView.text = rowUi.viewName ?: rowUi.name
@@ -159,7 +160,7 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
                         }
                     }
 
-                    is LinearLayout -> {
+                    rowView is LinearLayout -> {
                         val chars = rowUi.chars?.filterNotNull() ?: listOf("chars","is null")
                         val index = chars.indexOf(default)
                         newLoginInfo[rowUi.name] = default ?: run{
@@ -179,14 +180,16 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
             if (index != -1) {
                 val rowUi = rowUis?.getOrNull(index) ?: return@forEach
                 val value = value ?: rowUi.default
-                when (val rowView = binding.root.findViewById<View>(index + 1000)) {
-                    is TextInputLayout -> {
+                val rowView = binding.root.findViewById<View>(index + 1000)
+                val editText = findLoginEditText(rowView)
+                when {
+                    editText != null -> {
                         val value = value ?: ""
                         loginInfo[rowUi.name] = value
-                        rowView.editText?.setText(value)
+                        editText.setText(value)
                     }
 
-                    is TextView -> {
+                    rowView is TextView -> {
                         when (rowUi.type) {
                             Type.button -> {
                                 rowView.text = value ?: rowUi.viewName ?: key
@@ -205,7 +208,7 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
                         }
                     }
 
-                    is LinearLayout -> {
+                    rowView is LinearLayout -> {
                         val items = rowUi.chars?.filterNotNull() ?: listOf("chars","is null")
                         val index = items.indexOf(value)
                         rowView.findViewById<AppCompatSpinner>(R.id.sp_type)?.setSelectionSafely(index)
@@ -457,10 +460,11 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
                 val buttonFunctionJS = action
                 val loginJS = loginUrl ?: return@launch
                 kotlin.runCatching {
+                    val loginData = getLoginData(rowUis)
                     runScriptWithContext {
                         source.evalJS("$loginJS\n$buttonFunctionJS") {
                             put("java", sourceLoginJsExtensions)
-                            put("result", getLoginData(rowUis))
+                            put("result", loginData)
                             put("book", viewModel.book)
                             put("chapter", viewModel.chapter)
                             put("isLongClick", isLongClick)
@@ -474,19 +478,28 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
         }
     }
 
-    private fun getLoginData(rowUis: List<RowUi>?): MutableMap<String, String> {
+    private suspend fun getLoginData(rowUis: List<RowUi>?): MutableMap<String, String> {
         val loginData = hashMapOf<String, String>()
-        rowUis?.forEachIndexed { index, rowUi ->
-            when (rowUi.type) {
-                Type.text, Type.password -> {
-                    val rowView = binding.root.findViewById<View>(index + 1000)
-                    ItemSourceEditBinding.bind(rowView).editText.text.let {
-                        loginData[rowUi.name] = it?.toString() ?: rowUi.default ?: "" //没文本的时候存空字符串,而不是删除loginInfo
+        withContext(Main) {
+            rowUis?.forEachIndexed { index, rowUi ->
+                when (rowUi.type) {
+                    Type.text, Type.password -> {
+                        val rowView = binding.root.findViewById<View>(index + 1000)
+                        loginData[rowUi.name] = findLoginEditText(rowView)
+                            ?.text
+                            ?.toString()
+                            ?: viewModel.loginInfo[rowUi.name]
+                            ?: rowUi.default
+                            ?: "" //没文本的时候存空字符串,而不是删除loginInfo
                     }
                 }
             }
         }
         return viewModel.loginInfo.toMutableMap().apply { putAll(loginData) }
+    }
+
+    private fun findLoginEditText(rowView: View?): EditText? {
+        return rowView as? EditText ?: rowView?.findViewById(R.id.editText)
     }
 
     private fun login(source: BaseSource) {

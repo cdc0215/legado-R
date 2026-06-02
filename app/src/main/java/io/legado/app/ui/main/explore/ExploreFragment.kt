@@ -811,8 +811,16 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             val isSelect = kind.type == ExploreKind.Type.select
             val isButton = kind.type == ExploreKind.Type.button && !action.isNullOrBlank()
 
-            if (isDiscoverMajorGroupKind(kind)) {
+            if (isDiscoverMajorGroupKind(kind, currentGroup != null)) {
                 currentGroup = resolveDiscoverGroupTitle(kind)
+                if (!url.isNullOrBlank()) {
+                    result += DiscoverTagItem(
+                        kind = kind.copy(title = getString(R.string.all), viewName = null, url = url),
+                        text = getString(R.string.all),
+                        isButton = false,
+                        group = currentGroup
+                    )
+                }
                 return@forEach
             }
 
@@ -865,9 +873,17 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         return normalized.distinctBy { "${it.group}|${it.kind.type}|${it.kind.title}|${it.kind.url}|${it.kind.action}" }
     }
 
-    private fun isDiscoverMajorGroupKind(kind: ExploreKind): Boolean {
-        if (!kind.action.isNullOrBlank() || !kind.url.isNullOrBlank()) return false
+    private fun isDiscoverMajorGroupKind(
+        kind: ExploreKind,
+        hasStartedGroup: Boolean
+    ): Boolean {
+        if (!kind.action.isNullOrBlank()) return false
         if (kind.type == ExploreKind.Type.button || kind.type == ExploreKind.Type.select) return false
+        if (!kind.url.isNullOrBlank() && !hasStartedGroup) return false
+        return isDiscoverFullLineKind(kind)
+    }
+
+    private fun isDiscoverFullLineKind(kind: ExploreKind): Boolean {
         val style = kind.style()
         if (style.layout_flexBasisPercent >= 0.95f) return true
         if (style.layout_flexGrow >= 1f && style.layout_flexBasisPercent < 0f) return true

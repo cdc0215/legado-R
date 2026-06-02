@@ -2,6 +2,11 @@ package io.legado.app.ui.book.cache
 
 import android.os.Bundle
 import android.graphics.Color
+import android.view.Gravity
+import android.view.MotionEvent
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +25,7 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.utils.applyNavigationBarMargin
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.gone
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivityForBook
@@ -32,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 class CacheManageActivity :
     VMBaseActivity<ActivityCacheManageBinding, CacheManageViewModel>(),
@@ -45,6 +52,9 @@ class CacheManageActivity :
     private var audioTaskReloadJob: Job? = null
     private var lastMissingTaskReloadAt = 0L
     private val handledTerminalTaskReloads = hashSetOf<String>()
+    private var showingStats = false
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initView()
@@ -53,16 +63,40 @@ class CacheManageActivity :
         viewModel.load(CacheManageMode.BOOK)
     }
 
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                if (abs(dx) > SWIPE_TAB_DISTANCE_DP.dp && abs(dx) > abs(dy) * 1.35f) {
+                    switchAdjacentTab(if (dx < 0) 1 else -1)
+                    return true
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     private fun initView() = binding.run {
         tabBar.background = UiCorner.opaqueRounded(
             ContextCompat.getColor(this@CacheManageActivity, R.color.background_menu),
             UiCorner.panelRadius(this@CacheManageActivity)
         )
-        listOf(btnBooks, btnAudio, btnVideo, btnManga).forEach {
+        listOf(btnBooks, btnAudio, btnVideo, btnManga, btnStats).forEach {
             it.background = UiCorner.actionSelector(
                 Color.TRANSPARENT,
                 ContextCompat.getColor(this@CacheManageActivity, R.color.background_card),
                 UiCorner.actionRadius(this@CacheManageActivity)
+            )
+        }
+        listOf(cardStatsTotal, cardStatsDetail, cardStatsCache).forEach {
+            it.background = UiCorner.rounded(
+                ContextCompat.getColor(this@CacheManageActivity, R.color.background_card),
+                UiCorner.panelRadius(this@CacheManageActivity)
             )
         }
         recyclerView.layoutManager = LinearLayoutManager(this@CacheManageActivity)
@@ -72,9 +106,11 @@ class CacheManageActivity :
         btnAudio.setOnClickListener { switchMode(CacheManageMode.AUDIO) }
         btnVideo.setOnClickListener { switchMode(CacheManageMode.VIDEO) }
         btnManga.setOnClickListener { switchMode(CacheManageMode.MANGA) }
+        btnStats.setOnClickListener { showStats() }
         btnUploadAll.setOnClickListener { uploadAll() }
         btnDeleteAll.setOnClickListener { deleteAll() }
         batchBar.applyNavigationBarMargin(withInitialMargin = true)
+        statsScroll.applyNavigationBarPadding(withInitialPadding = true)
         updateTabs(CacheManageMode.BOOK)
     }
 
@@ -82,7 +118,7 @@ class CacheManageActivity :
         viewModel.itemsLiveData.observe(this) { items ->
             adapter.setItems(items)
             binding.tvEmpty.run {
-                if (items.isEmpty()) {
+                if (!showingStats && items.isEmpty()) {
                     text = getString(R.string.cache_manage_empty, getString(viewModel.mode.titleRes))
                     visible()
                 } else {
@@ -91,14 +127,10 @@ class CacheManageActivity :
             }
         }
         viewModel.summaryLiveData.observe(this) { summary ->
-            binding.tvSummary.text = getString(
-                R.string.cache_manage_summary_state,
-                summary.bookCount,
-                summary.cachedChapterCount
-            )
+            if (showingStats) renderStats(summary)
         }
         viewModel.loadingLiveData.observe(this) { loading ->
-            if (loading) binding.rotateLoading.visible() else binding.rotateLoading.gone()
+            if (loading && !showingStats) binding.rotateLoading.visible() else binding.rotateLoading.gone()
         }
     }
 
@@ -159,20 +191,153 @@ class CacheManageActivity :
     }
 
     private fun switchMode(mode: CacheManageMode) {
-        if (viewModel.mode == mode) return
+        showingStats = false
         updateTabs(mode)
+        binding.recyclerView.visible()
+        binding.statsScroll.gone()
+        binding.batchBar.visible()
+        binding.tvEmpty.gone()
+        if (viewModel.mode == mode) return
         viewModel.load(mode)
     }
 
-    private fun updateTabs(mode: CacheManageMode) = binding.run {
+    private fun showStats() = binding.run {
+        showingStats = true
+        updateTabs(null)
+        recyclerView.gone()
+        tvEmpty.gone()
+        rotateLoading.gone()
+        batchBar.gone()
+        statsScroll.visible()
+        viewModel.loadStats()
+    }
+
+    private fun switchAdjacentTab(offset: Int) {
+        val currentIndex = tabOrder.indexOfFirst { tab ->
+            if (showingStats) tab == null else tab == viewModel.mode
+        }
+        val targetIndex = currentIndex + offset
+        if (targetIndex !in tabOrder.indices) return
+        val target = tabOrder[targetIndex]
+        if (target == null) {
+            showStats()
+        } else {
+            switchMode(target)
+        }
+    }
+
+    private fun updateTabs(mode: CacheManageMode?) = binding.run {
         btnBooks.isSelected = mode == CacheManageMode.BOOK
         btnAudio.isSelected = mode == CacheManageMode.AUDIO
         btnVideo.isSelected = mode == CacheManageMode.VIDEO
         btnManga.isSelected = mode == CacheManageMode.MANGA
+        btnStats.isSelected = mode == null
         btnBooks.setTextColor(if (mode == CacheManageMode.BOOK) accentColor else primaryTextColor)
         btnAudio.setTextColor(if (mode == CacheManageMode.AUDIO) accentColor else primaryTextColor)
         btnVideo.setTextColor(if (mode == CacheManageMode.VIDEO) accentColor else primaryTextColor)
         btnManga.setTextColor(if (mode == CacheManageMode.MANGA) accentColor else primaryTextColor)
+        btnStats.setTextColor(if (mode == null) accentColor else primaryTextColor)
+    }
+
+    private fun renderStats(summary: CacheSummary) = binding.run {
+        tvStatsTotal.text = summarySize(summary.totalCacheSize)
+        layStatsDetails.removeAllViews()
+        layStatsCacheDetails.removeAllViews()
+        val details = summary.storageDetails
+            .asSequence()
+            .filter { it.bytes > 0L }
+            .toList()
+        if (details.isEmpty()) {
+            layStatsDetails.addView(statsEmptyRow())
+            layStatsCacheDetails.addView(statsEmptyRow())
+            return@run
+        }
+        val dataDetails = sortStatsDetails(details.filter { it.deleteTarget == null })
+        val cacheDetails = sortStatsDetails(details.filter { it.deleteTarget != null })
+        if (dataDetails.isEmpty()) {
+            layStatsDetails.addView(statsEmptyRow())
+        } else {
+            dataDetails.forEach { detail ->
+                layStatsDetails.addView(statsDetailRow(detail))
+            }
+        }
+        if (cacheDetails.isEmpty()) {
+            layStatsCacheDetails.addView(statsEmptyRow())
+        } else {
+            cacheDetails.forEach { detail ->
+                layStatsCacheDetails.addView(statsDetailRow(detail))
+            }
+        }
+    }
+
+    private fun sortStatsDetails(details: List<CacheStorageDetail>): List<CacheStorageDetail> {
+        val otherName = getString(R.string.cache_manage_storage_other)
+        return details
+            .filterNot { it.name == otherName }
+            .sortedByDescending { it.bytes } +
+                details.filter { it.name == otherName }
+    }
+
+    private fun statsDetailRow(detail: CacheStorageDetail): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 9.dp, 0, 9.dp)
+            addView(TextView(context).apply {
+                text = detail.name
+                setTextColor(secondaryTextColor())
+                textSize = 13f
+                maxLines = 1
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply {
+                text = summarySize(detail.bytes)
+                setTextColor(primaryTextColor)
+                textSize = 14f
+                gravity = Gravity.END
+                maxLines = 1
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            detail.deleteTarget?.let { target ->
+                addView(ImageButton(context).apply {
+                    setImageResource(R.drawable.ic_outline_delete)
+                    setColorFilter(secondaryTextColor())
+                    background = UiCorner.actionSelector(
+                        Color.TRANSPARENT,
+                        ContextCompat.getColor(this@CacheManageActivity, R.color.background_menu),
+                        UiCorner.actionRadius(this@CacheManageActivity)
+                    )
+                    contentDescription = getString(R.string.delete)
+                    setPadding(8.dp, 8.dp, 8.dp, 8.dp)
+                    setOnClickListener { confirmDeleteStorage(detail.name, target) }
+                }, LinearLayout.LayoutParams(36.dp, 36.dp).apply {
+                    marginStart = 6.dp
+                })
+            }
+        }
+    }
+
+    private fun confirmDeleteStorage(name: String, target: CacheStorageDeleteTarget) {
+        alert(getString(R.string.delete), getString(R.string.cache_manage_delete_storage_confirm, name)) {
+            yesButton {
+                viewModel.deleteStorageDetail(target) {
+                    toastOnUi(R.string.delete_success)
+                }
+            }
+            noButton()
+        }
+    }
+
+    private fun statsEmptyRow(): TextView {
+        return TextView(this).apply {
+            text = getString(R.string.cache_manage_stats_empty)
+            setTextColor(secondaryTextColor())
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, 24.dp, 0, 20.dp)
+        }
+    }
+
+    private fun secondaryTextColor(): Int {
+        return ContextCompat.getColor(this, R.color.secondaryText)
     }
 
     override fun openChapters(item: CacheBookItem) {
@@ -250,6 +415,8 @@ class CacheManageActivity :
                         variant.totalChapterCount
                     )
                 )
+                append(" · ")
+                append(summarySize(variant.storageSizeBytes))
             }
         }
         selector(getString(R.string.cache_manage_select_source), labels) { _, index ->
@@ -332,6 +499,15 @@ private fun CacheTaskStatus.isTerminalForListRefresh(): Boolean {
 private const val MISSING_TASK_RELOAD_INTERVAL_MS = 2500L
 private const val MISSING_TASK_RELOAD_DELAY_MS = 250L
 private const val TERMINAL_TASK_RELOAD_DELAY_MS = 600L
+private const val SWIPE_TAB_DISTANCE_DP = 72
+
+private val tabOrder = listOf(
+    CacheManageMode.BOOK,
+    CacheManageMode.AUDIO,
+    CacheManageMode.VIDEO,
+    CacheManageMode.MANGA,
+    null
+)
 
 private fun CacheBookItem.hasLockedAudioTask(): Boolean {
     if (AudioCacheTaskManager.snapshot(book.bookUrl).locksCacheActions()) return true
@@ -341,3 +517,16 @@ private fun CacheBookItem.hasLockedAudioTask(): Boolean {
 private fun AudioCacheTaskState?.locksCacheActions(): Boolean {
     return this?.active == true || this?.status == CacheTaskStatus.PAUSED
 }
+
+private fun summarySize(bytes: Long): String {
+    val mb = bytes.toDouble() / 1024.0 / 1024.0
+    val gb = mb / 1024.0
+    return when {
+        gb >= 1.0 -> String.format(java.util.Locale.getDefault(), "%.2f GB", gb)
+        mb >= 0.01 -> String.format(java.util.Locale.getDefault(), "%.2f MB", mb)
+        else -> String.format(java.util.Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+    }
+}
+
+private val Int.dp: Int
+    get() = (this * splitties.init.appCtx.resources.displayMetrics.density).toInt()

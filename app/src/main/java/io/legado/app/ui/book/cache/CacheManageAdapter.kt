@@ -33,6 +33,8 @@ class CacheManageAdapter(
                     oldItem.sourceName == newItem.sourceName &&
                     oldItem.cachedCount == newItem.cachedCount &&
                     oldItem.totalChapterCount == newItem.totalChapterCount &&
+                    oldItem.storageSizeBytes == newItem.storageSizeBytes &&
+                    oldItem.storageSummary == newItem.storageSummary &&
                     oldItem.mode == newItem.mode &&
                     oldItem.taskState == newItem.taskState &&
                     oldItem.inBookshelf == newItem.inBookshelf &&
@@ -82,10 +84,17 @@ class CacheManageAdapter(
         btnSource.isEnabled = item.sourceVariants.size > 1
         btnSource.alpha = if (item.sourceVariants.size > 1) 1f else 0.72f
         tvCache.text = context.getString(
-            R.string.cache_manage_cached_count,
+            R.string.cache_manage_cached_count_with_size,
             item.cachedCount,
-            item.totalChapterCount
+            item.totalChapterCount,
+            item.formattedStorageSize()
         )
+        if (item.storageSummary.isBlank()) {
+            tvCacheDetail.gone()
+        } else {
+            tvCacheDetail.text = item.storageSummary
+            tvCacheDetail.visible()
+        }
         btnBookshelf.setText(
             if (item.inBookshelf) R.string.cache_manage_use_cache
             else R.string.cache_manage_add_bookshelf
@@ -100,7 +109,7 @@ class CacheManageAdapter(
         val isPaused = taskState?.status == CacheTaskStatus.PAUSED
         if (isCaching || isPaused) {
             tvTask.visible()
-            tvTask.text = taskState?.message
+            tvTask.text = taskState.message
             btnStop.setText(if (isPaused) R.string.resume else R.string.pause)
             btnStop.visible()
         } else {
@@ -177,6 +186,16 @@ class CacheManageAdapter(
             variant.taskState?.let { return it }
         }
         return item.taskState
+    }
+
+    private fun CacheBookItem.formattedStorageSize(): String {
+        val bytes = storageSizeBytes
+        val mb = bytes.toDouble() / 1024.0 / 1024.0
+        return if (mb >= 0.01) {
+            String.format(java.util.Locale.getDefault(), "%.2f MB", mb)
+        } else {
+            String.format(java.util.Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+        }
     }
 
     private companion object {

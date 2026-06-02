@@ -347,6 +347,25 @@ object ExoPlayerHelper {
         }
     }
 
+    fun clearAudioCache() {
+        audioCache.keys.toList().forEach { audioCache.removeResource(it) }
+        audioCompleteMarkerDir.listFiles()?.forEach { it.delete() }
+    }
+
+    fun clearVideoCache() {
+        cache.keys.toList().forEach { cache.removeResource(it) }
+    }
+
+    fun getMediaCacheSize(url: String?): Long {
+        if (url.isNullOrBlank()) return 0L
+        return getMediaUrls(url).sumOf { mediaUrl ->
+            audioCache.getCachedSpans(mediaUrl)
+                .asSequence()
+                .filter { it.isCached }
+                .sumOf { it.length.coerceAtLeast(0L) }
+        }
+    }
+
     fun copyMediaCache(url: String?, targetDir: File): Int {
         if (url.isNullOrBlank()) return 0
         if (!targetDir.exists()) targetDir.mkdirs()
