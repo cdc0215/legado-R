@@ -40,6 +40,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     private var episodeList: TextView? = null
     private var playbackSpeed: TextView? = null
     private var playSpeed: Float = 1.0f
+    var onPlaySpeedChanged: ((Float) -> Unit)? = null
     private var btnNext: ImageView? = null
     private var tipView: TextView? = null
     private var isChanging = false
@@ -239,6 +240,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     override fun onPrepared() {
         super.onPrepared()
         onPrepareDanmaku(this)
+        VideoPlay.queuePreparedNextEpisode()
     }
     private fun onPrepareDanmaku(gsyVideoPlayer: VideoPlayer) {
         val view = gsyVideoPlayer.mDanmakuView
@@ -262,6 +264,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     override fun onVideoResume(isResume: Boolean) {
         super.onVideoResume(isResume)
         danmakuOnResume()
+        ensureVideoSurfaceBound()
     }
     fun danmakuOnResume() {
         if (mDanmakuView != null && mDanmakuView!!.isPrepared && mDanmakuView!!.isPaused) {
@@ -280,6 +283,9 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     override fun onAutoCompletion() { //播放完成
         super.onAutoCompletion()
+        if (VideoPlay.videoManager.hasNext()) {
+            return
+        }
         VideoPlay.upDurIndex(1, this)
     }
 
@@ -623,6 +629,41 @@ class VideoPlayer: StandardGSYVideoPlayer {
         choiceEpisodeDialog.show()
     }
 
+    fun showPlaybackSpeedDialog() {
+        if (mHadPlay && !isChanging) {
+            showSpeedDialog()
+        }
+    }
+
+    fun getPlaySpeed(): Float {
+        return playSpeed
+    }
+
+    fun isPlayingForRestore(): Boolean {
+        return mCurrentState == CURRENT_STATE_PLAYING
+    }
+
+    fun updateTitle(title: String?) {
+        findViewById<TextView?>(R.id.title)?.text = title.orEmpty()
+    }
+
+    fun onSeamlessEpisodeChanged(title: String?) {
+        nextUI()
+        updateTitle(title)
+        resetDanmaku()
+        ensureVideoSurfaceBound()
+    }
+
+    private fun resetDanmaku() {
+        releaseDanmaku(this)
+        mDanmakuView = null
+        mDanmakuContext = null
+        mParser = null
+        mDanmakuStartSeekPosition = 0
+        initDanmaku()
+        onPrepareDanmaku(this)
+    }
+
     private fun showSpeedDialog() {
         if (!mHadPlay) {
             return
@@ -641,6 +682,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
                 } else {
                     playbackSpeed?.text = "倍速"
                 }
+                onPlaySpeedChanged?.invoke(playSpeed)
             }
 
             override fun finishDialog() {
@@ -742,8 +784,9 @@ class VideoPlayer: StandardGSYVideoPlayer {
         return ExoVideoManager.SMALL_ID
     }
     override fun setDisplay(surface: Surface?) {
-        if (surface != null && mTextureView.getShowView() is SurfaceView) {
-            val surfaceView = (mTextureView.getShowView() as SurfaceView?)
+        val showView = mTextureView?.getShowView()
+        if (surface != null && showView is SurfaceView) {
+            val surfaceView = showView as SurfaceView?
             gsyVideoManager.setDisplayNew(surfaceView)
         } else if (surface != null) {
             gsyVideoManager.setDisplay(surface)
@@ -751,6 +794,29 @@ class VideoPlayer: StandardGSYVideoPlayer {
             gsyVideoManager.setDisplayNew(null)
         }
     }
+
+    override fun onVideoResume() {
+        super.onVideoResume()
+        ensureVideoSurfaceBound()
+    }
+
+    fun ensureVideoSurfaceBound() {
+        post {
+            rebindVideoSurface()
+        }
+        postDelayed({
+            rebindVideoSurface()
+        }, 120)
+    }
+
+    private fun rebindVideoSurface() {
+        if (mSurface?.isValid == true) {
+            setDisplay(mSurface)
+        }
+        mTextureView?.requestLayout()
+        mTextureView?.invalidate()
+    }
+
     fun nextUI() { resetProgressAndTime() }
 
 

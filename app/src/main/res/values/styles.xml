@@ -200,4 +200,8 @@
         <item name="android:textSize">12sp</item>
     </style>
 
+    <style name="TextAppearance.RowUi.InputHint" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">12sp</item>
+    </style>
+
 </resources>

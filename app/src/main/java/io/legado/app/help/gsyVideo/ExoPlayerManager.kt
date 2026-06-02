@@ -31,6 +31,7 @@ class ExoPlayerManager : BasePlayerManager() {
     private var surfaceControl: SurfaceControl? = null
     private var videoSurface: Surface? = null
     private var mediaPlayer: Exo2MediaPlayer? = null
+    private var onMediaKeyTransition: ((String) -> Unit)? = null
     override fun getMediaPlayer(): IMediaPlayer? {
         return mediaPlayer
     }
@@ -42,6 +43,7 @@ class ExoPlayerManager : BasePlayerManager() {
         cacheManager: ICacheManager
     ) {
         mediaPlayer = Exo2MediaPlayer(context)
+        mediaPlayer!!.onMediaKeyTransition = onMediaKeyTransition
         mediaPlayer!!.setAudioStreamType(AudioManager.STREAM_MUSIC)
         if (dummySurface == null) {
             dummySurface = PlaceholderSurface.newInstance(context, false)
@@ -187,6 +189,19 @@ class ExoPlayerManager : BasePlayerManager() {
             return
         }
         mediaPlayer!!.next()
+    }
+
+    fun appendNext(key: String, url: String, headers: Map<String, String>) {
+        mediaPlayer?.appendNext(key, url, headers)
+    }
+
+    fun hasNext(): Boolean {
+        return mediaPlayer?.hasNext() == true
+    }
+
+    fun setOnMediaKeyTransitionListener(listener: ((String) -> Unit)?) {
+        onMediaKeyTransition = listener
+        mediaPlayer?.onMediaKeyTransition = listener
     }
 
     override fun getNetSpeed(): Long {

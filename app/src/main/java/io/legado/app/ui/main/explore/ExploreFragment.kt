@@ -140,6 +140,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private var discoverLoadingSignals = 0
     private var discoverLoadingGeneration = 0L
     private var discoveryModeLoaded = false
+    private val discoverTextActionJobs = hashMapOf<String, Job>()
 
     private fun areBookSourcePartListsSame(
         old: List<BookSourcePart>,
@@ -815,6 +816,16 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 return@forEach
             }
 
+            if (kind.type == ExploreKind.Type.text) {
+                result += DiscoverTagItem(
+                    kind = kind.copy(type = ExploreKind.Type.text),
+                    text = resolveDiscoverTagText(kind),
+                    isButton = false,
+                    group = currentGroup
+                )
+                return@forEach
+            }
+
             if (!url.isNullOrBlank() && !isButton && !isSelect) {
                 result += DiscoverTagItem(
                     kind = kind.copy(url = url),
@@ -938,6 +949,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         val hasMajorGroup = discoverMajorGroups.isNotEmpty()
         return discoverAllTagItems.filter {
             it.kind.type == ExploreKind.Type.select
+                || it.kind.type == ExploreKind.Type.text
                 || it.isButton
                 || (hasMajorGroup && it.group.isNullOrBlank())
         }
@@ -963,6 +975,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                     val item = itemMap[rowUi.name] ?: return
                     when (rowUi.type) {
                         RowUi.Type.select -> handleDiscoverSelectValue(item, value)
+                        RowUi.Type.text -> handleDiscoverTextValue(item, value)
                     }
                 }
 
@@ -981,6 +994,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private fun DiscoverTagItem.toDiscoverRowUi(): RowUi {
         val type = when {
             kind.type == ExploreKind.Type.select -> RowUi.Type.select
+            kind.type == ExploreKind.Type.text -> RowUi.Type.text
             isButton || isDefaultUrlKind -> RowUi.Type.button
             else -> RowUi.Type.text
         }
@@ -1127,6 +1141,50 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 refreshController.finish()
             }
         }
+    }
+
+    private fun handleDiscoverTextValue(item: DiscoverTagItem, value: String) {
+        val source = selectedDiscoverSource ?: return
+        val key = item.kind.title
+        if (key.isBlank()) return
+        val infoMap = getDiscoverInfoMap(source.bookSourceUrl)
+        infoMap[key] = value
+        val action = item.kind.action?.takeIf { it.isNotBlank() } ?: return
+        discoverTextActionJobs.remove(key)?.cancel()
+        val job = viewLifecycleOwner.lifecycleScope.launch {
+            delay(600)
+            val refreshController = DiscoverRefreshController()
+            try {
+                withContext(IO) {
+                    runScriptWithContext {
+                        source.evalJS(action) {
+                            put(
+                                "java",
+                                discoverJsExtensions(source, refreshController)
+                            )
+                            put("infoMap", infoMap)
+                        }
+                    }
+                }
+                if (refreshController.requested && isAdded) {
+                    withContext(IO) {
+                        source.clearExploreKindsCache()
+                    }
+                    loadDiscoverKindsAndDefault()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("发现文本输入执行失败: ${item.text}", e)
+                context?.toastOnUi(e.localizedMessage ?: getString(R.string.unknown_error))
+            } finally {
+                refreshController.finish()
+                if (discoverTextActionJobs[key] === coroutineContext[Job]) {
+                    discoverTextActionJobs.remove(key)
+                }
+            }
+        }
+        discoverTextActionJobs[key] = job
     }
 
     private fun selectDiscoverTabByCode(index: Int, smooth: Boolean) {

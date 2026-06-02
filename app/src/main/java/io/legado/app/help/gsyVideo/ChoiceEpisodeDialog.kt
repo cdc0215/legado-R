@@ -8,11 +8,17 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import io.legado.app.R
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.lib.theme.secondaryTextColor
+import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.navigationBarHeight
 
 class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
     mContext, R.style.dialog_style
@@ -49,7 +55,13 @@ class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
         this.data = data
         val inflater = LayoutInflater.from(mContext)
         val view: View = inflater.inflate(R.layout.switch_episode_video_dialog, null)
-        view.findViewById<TextView>(R.id.listCount).text = "选集（${data.size}）"
+        view.setBackgroundColor(ColorUtils.adjustAlpha(mContext.backgroundColor, 0.96f))
+        val bottomPadding = mContext.navigationBarHeight + 8.dpToPx()
+        view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, bottomPadding)
+        view.findViewById<TextView>(R.id.listCount).apply {
+            text = "选集（${data.size}）"
+            setTextColor(mContext.secondaryTextColor)
+        }
         listView = view.findViewById(R.id.switch_dialog_list)
         setContentView(view)
         adapter = SwitchVideoAdapter(mContext, data) { item -> item.title }
@@ -62,7 +74,7 @@ class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
         val lp = dialogWindow!!.attributes
         val d = mContext.resources.displayMetrics // 获取屏幕宽、高用
         lp.width = (d.widthPixels * 0.4).toInt() // 宽度设置为屏幕的0.4
-        lp.height = d.heightPixels
+        lp.height = WindowManager.LayoutParams.MATCH_PARENT
         lp.gravity = Gravity.END // 设置靠右对齐
         dialogWindow.setAttributes(lp)
     }

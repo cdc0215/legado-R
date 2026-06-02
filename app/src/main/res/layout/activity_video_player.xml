@@ -407,6 +407,21 @@
                 android:src="@drawable/ic_float_window"
                 app:tint="@color/primaryText" />
 
+
+            <TextView
+                android:id="@+id/btn_collapsed_playback_speed"
+                android:layout_width="42dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@color/transparent"
+                android:contentDescription="@string/playback_speed"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="@string/playback_speed"
+                android:textColor="@color/primaryText"
+                android:textSize="13sp" />
+                
         </LinearLayout>
 
     </FrameLayout>

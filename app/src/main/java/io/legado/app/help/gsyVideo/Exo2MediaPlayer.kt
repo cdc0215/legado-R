@@ -16,11 +16,10 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.DefaultRenderersFactory.ExtensionRendererMode
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.legado.app.help.exoplayer.ExoPlayerHelper
-import io.legado.app.model.VideoPlay
 import tv.danmaku.ijk.media.exo2.IjkExo2MediaPlayer
 import tv.danmaku.ijk.media.exo2.demo.EventLogger
 
@@ -30,6 +29,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         private const val MAX_POSITION_FOR_SEEK_TO_PREVIOUS: Long = 3000
     }
     private val window = Timeline.Window()
+    private val mediaKeys = arrayListOf<String?>(null)
+    private val reportedMediaKeys = hashSetOf<String>()
+    private var pendingNextMediaSource: MediaSource? = null
+    private var pendingNextKey: String? = null
+    var onMediaKeyTransition: ((String) -> Unit)? = null
 
     override fun setDataSource(context: Context?, uri: Uri?, headers: MutableMap<String, String>?) {
         if (headers != null) {
@@ -42,6 +46,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     override fun setDataSource(context: Context?, uri: Uri?) {
         val dataSource = uri?.toString() ?: return
         mDataSource = dataSource
+        mediaKeys.clear()
+        mediaKeys.add(null)
+        reportedMediaKeys.clear()
+        pendingNextMediaSource = null
+        pendingNextKey = null
         mMediaSource = ExoPlayerHelper.createOfflineMediaSource(
             context ?: mAppContext,
             dataSource,
@@ -112,8 +121,48 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             }
             if (mSurface != null) mInternalPlayer.setVideoSurface(mSurface)
             mInternalPlayer.setMediaSource(mMediaSource)
+            pendingNextMediaSource?.let { mediaSource ->
+                mInternalPlayer.addMediaSource(mediaSource)
+                mediaKeys.add(pendingNextKey)
+            }
+            pendingNextMediaSource = null
+            pendingNextKey = null
             mInternalPlayer.prepare()
             mInternalPlayer.playWhenReady = false
+        }
+    }
+
+    fun appendNext(key: String, url: String, headers: Map<String, String>) {
+        if (key.isBlank() || url.isBlank()) return
+        if (mediaKeys.contains(key) || pendingNextKey == key) return
+        val mediaSource = ExoPlayerHelper.createOfflineMediaSource(mAppContext, url, headers)
+        val player = mInternalPlayer
+        if (player == null) {
+            pendingNextMediaSource = mediaSource
+            pendingNextKey = key
+            return
+        }
+        val insertIndex = player.currentMediaItemIndex + 1
+        if (insertIndex < player.mediaItemCount) {
+            player.removeMediaItems(insertIndex, player.mediaItemCount)
+            while (mediaKeys.size > insertIndex) {
+                mediaKeys.removeAt(mediaKeys.lastIndex)
+            }
+        }
+        player.addMediaSource(mediaSource)
+        mediaKeys.add(key)
+    }
+
+    fun hasNext(): Boolean {
+        val player = mInternalPlayer ?: return pendingNextMediaSource != null
+        return player.nextMediaItemIndex != C.INDEX_UNSET
+    }
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        super.onMediaItemTransition(mediaItem, reason)
+        val key = mediaKeys.getOrNull(currentWindowIndex) ?: return
+        if (reportedMediaKeys.add(key)) {
+            onMediaKeyTransition?.invoke(key)
         }
     }
 

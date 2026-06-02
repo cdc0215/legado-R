@@ -46,6 +46,7 @@ import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.webView.PooledWebView
@@ -118,6 +119,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     companion object {
         const val EXTRA_PREPARE_BOOK_INFO = "prepareBookInfo"
         private const val COLLAPSED_PANEL_HEIGHT_DP = 50
+        private var suppressStartFullAfterThemeSwitch = false
+        private var restoreBottomPanelExpandedAfterThemeSwitch: Boolean? = null
+        private var restorePlayingAfterThemeSwitch = true
     }
 
     override val binding by viewBinding(ActivityVideoPlayerBinding::inflate)
@@ -164,6 +168,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var isNew = true
     private var isFullScreen = false
     private var isBottomPanelExpanded = false
+    private var isRecreatingForTheme = false
     private var preparedVideoStarted = false
     private var detailTabIndex = 0
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -209,6 +214,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.bottomPanelContainer.applyNavigationBarMargin(withInitialMargin = true)
         applyVideoDetailTypeface()
         playerView.enlargeImageRes = R.drawable.ic_fullscreen
+        restoreBottomPanelExpandedAfterThemeSwitch?.let {
+            isBottomPanelExpanded = it
+            restoreBottomPanelExpandedAfterThemeSwitch = null
+        }
         isNew = intent.getBooleanExtra("isNew", true)
         setupPlayerView()
         setupBottomPanel()
@@ -241,8 +250,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         } else {
             VideoPlay.clonePlayState(playerView)
             playerView.setSurfaceToPlay()
-            playerView.startAfterPrepared()
-            binding.titleBar.title = VideoPlay.videoTitle
+            if (restorePlayingAfterThemeSwitch) {
+                playerView.startAfterPrepared()
+            }
+            binding.titleBar.title = VideoPlay.activityTitle()
+            playerView.updateTitle(VideoPlay.displayTitle())
             initView()
         }
         upView()
@@ -292,10 +304,17 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             binding.collapsedStatusBarSpacer.layoutParams.apply {
                 height = statusBarHeight
             }
-        setBottomPanelExpanded(false)
+        setBottomPanelExpanded(isBottomPanelExpanded)
         binding.bottomPanelCollapsedBar.setOnClickListener {
             setBottomPanelExpanded(true)
         }
+        binding.btnCollapsedPlaybackSpeed.setOnClickListener {
+            playerView.showPlaybackSpeedDialog()
+        }
+        playerView.onPlaySpeedChanged = {
+            updateCollapsedPlaybackSpeedText()
+        }
+        updateCollapsedPlaybackSpeedText()
         binding.btnCollapsedFloatWindow.setOnClickListener {
             startFloatingWindow()
         }
@@ -389,6 +408,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.tvCollapsedEpisode.text = "$current/$total"
     }
 
+    private fun updateCollapsedPlaybackSpeedText() {
+        val playSpeed = playerView.getPlaySpeed()
+        binding.btnCollapsedPlaybackSpeed.text = if (playSpeed == 1.0f) {
+            getString(R.string.playback_speed)
+        } else {
+            "${playSpeed}X"
+        }
+    }
+
     private fun setupDetailTabs() {
         binding.tabIntro.setOnClickListener { selectVideoDetailTab(0) }
         binding.tabToc.setOnClickListener { selectVideoDetailTab(1) }
@@ -405,7 +433,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         tabs.forEachIndexed { tabIndex, tab ->
             val selected = tabIndex == detailTabIndex
             tab.isSelected = selected
-            tab.setTextColor(if (selected) accentColor else secondaryTextColor)
+            tab.setTextColor(if (selected) primaryTextColor else secondaryTextColor)
         }
     }
 
@@ -761,6 +789,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         upEpisodesView()
         upVolumesView()
         updateCollapsedEpisodeText()
+        binding.titleBar.title = VideoPlay.activityTitle() ?: binding.titleBar.title
+        playerView.getCurrentPlayer().updateTitle(VideoPlay.displayTitle())
     }
 
     private fun upEpisodesView() {
@@ -787,7 +817,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
             supportActionBar?.hide()
             binding.bottomPanelContainer.gone()
-            playerView.startWindowFullscreen(this, false, false)
+            playerView.startWindowFullscreen(this, false, false)?.let {
+                it.backButton.setOnClickListener { toggleFullScreen() }
+                it.updateTitle(VideoPlay.displayTitle())
+            }
         } else {
             requestedOrientation = orientation
             supportActionBar?.show()
@@ -798,10 +831,27 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
             playerView.postDelayed({
                 playerView.backFromFull(this)
-                applyBottomPanelStatusBarStyle()
+                scheduleNormalVideoLayoutRestore()
             }, if (VideoPlay.isPortraitVideo) 300 else 0)
             upView()
         }
+    }
+
+    private fun scheduleNormalVideoLayoutRestore() {
+        restoreNormalVideoLayout()
+        binding.root.post { restoreNormalVideoLayout() }
+        binding.root.postDelayed({ restoreNormalVideoLayout() }, 160)
+        binding.root.postDelayed({ restoreNormalVideoLayout() }, 360)
+    }
+
+    private fun restoreNormalVideoLayout() {
+        if (isFullScreen || VideoPlay.book == null) {
+            return
+        }
+        binding.bottomPanelContainer.visible()
+        setBottomPanelExpanded(isBottomPanelExpanded)
+        selectVideoDetailTab(detailTabIndex)
+        applyBottomPanelStatusBarStyle()
     }
 
 
@@ -827,6 +877,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     }
                 }
             }
+            scheduleNormalVideoLayoutRestore()
         }
     }
 
@@ -844,6 +895,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         playerView.layoutParams = layoutParams
         updatePlayerViewSize(isBottomPanelExpanded)
         playerView.isNeedOrientationUtils = false //关闭自带的屏幕方向控制
+        playerView.backButton.setOnClickListener { finish() }
+        playerView.updateTitle(VideoPlay.displayTitle())
         playerView.fullscreenButton.setOnClickListener { toggleFullScreen() }
         playerView.setBackFromFullScreenListener { toggleFullScreen() }
         playerView.setVideoAllCallBack(object : GSYSampleCallBack() {
@@ -869,7 +922,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT //提前进入了全屏，并且默认横屏了，纠正回来
                             return@post
                         }
-                        if (VideoPlay.startFull && VideoPlay.autoPlay && !isFullScreen) {
+                        if (suppressStartFullAfterThemeSwitch) {
+                            suppressStartFullAfterThemeSwitch = false
+                        } else if (VideoPlay.startFull && VideoPlay.autoPlay && !isFullScreen) {
                             toggleFullScreen()
                             return@post
                         }
@@ -890,6 +945,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
             override fun onClickResume(url: String?, vararg objects: Any?) {
                 setVideoKeepScreenOn(true)
+                playerView.getCurrentPlayer().ensureVideoSurfaceBound()
             }
 
             override fun onClickStop(url: String?, vararg objects: Any?) {
@@ -920,9 +976,22 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             it.isVisible = (VideoPlay.source as? BookSource)?.customButton == true
         }
         starMenuItem = menu.findItem(R.id.menu_rss_star)
+        updateThemeModeMenuItem(menu.findItem(R.id.menu_theme_mode))
         menu.findItem(R.id.menu_video_cache)?.icon?.setTintMutate(primaryTextColor)
         upStarMenu()
         return super.onPrepareOptionsMenu(menu)
+    }
+
+    private fun updateThemeModeMenuItem(item: MenuItem?) {
+        item ?: return
+        if (AppConfig.isNightTheme) {
+            item.setIcon(R.drawable.ic_daytime)
+            item.setTitle(R.string.theme_day)
+        } else {
+            item.setIcon(R.drawable.ic_brightness)
+            item.setTitle(R.string.theme_night)
+        }
+        item.icon?.setTintMutate(primaryTextColor)
     }
 
     private fun upStarMenu() {
@@ -964,6 +1033,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
             R.id.menu_rss_star -> viewModel.addFavorite {
                 VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
+            }
+            R.id.menu_theme_mode -> {
+                AppConfig.isNightTheme = !AppConfig.isNightTheme
+                ThemeConfig.applyDayNight(this)
+                return true
             }
             R.id.menu_float_window -> startFloatingWindow()
             R.id.menu_config_settings -> showDialogFragment(SettingsDialog(this))
@@ -1124,8 +1198,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     override fun observeLiveBus() {
 
+        observeEvent<String>(EventBus.RECREATE) {
+            recreateForThemeChange()
+        }
+
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             binding.titleBar.title = it
+            playerView.getCurrentPlayer().updateTitle(VideoPlay.displayTitle() ?: it)
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
@@ -1137,6 +1216,20 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             updateCollapsedEpisodeText()
         }
 
+    }
+
+    private fun recreateForThemeChange() {
+        if (isRecreatingForTheme) {
+            return
+        }
+        suppressStartFullAfterThemeSwitch = true
+        restoreBottomPanelExpandedAfterThemeSwitch = isBottomPanelExpanded
+        restorePlayingAfterThemeSwitch = playerView.getCurrentPlayer().isPlayingForRestore()
+        intent.putExtra("isNew", false)
+        VideoPlay.savePlayState(playerView)
+        playerView.needDestroy = false
+        isRecreatingForTheme = true
+        recreate()
     }
 
     override fun finish() {
@@ -1203,8 +1296,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         if (VideoPlay.inBookshelf) {
             VideoPlay.syncProgress()
         }
-        VideoPlay.stopLoading()
-        playerView.getCurrentPlayer().release()
+        if (!isRecreatingForTheme) {
+            VideoPlay.stopLoading()
+            playerView.getCurrentPlayer().release()
+        }
         setVideoKeepScreenOn(false)
     }
 

@@ -6,11 +6,13 @@ import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -159,6 +161,18 @@ object ExoPlayerHelper {
             )
     }
 
+    private fun videoPreloadDataSourceFactory(headers: Map<String, String>): CacheDataSource.Factory {
+        return CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(okhttpDataFactory(headers))
+            .setCacheReadDataSourceFactory(FileDataSource.Factory())
+            .setCacheWriteDataSinkFactory(
+                CacheDataSink.Factory()
+                    .setCache(cache)
+                    .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
+            )
+    }
+
     /**
      * Okhttp DataSource.Factory
      */
@@ -187,8 +201,8 @@ object ExoPlayerHelper {
         return@lazy SimpleCache(
             //Exoplayer的缓存路径
             File(appCtx.externalCache, "exoplayer"),
-            //100M的缓存
-            LeastRecentlyUsedCacheEvictor((100 * 1024 * 1024).toLong()),
+            // 视频播放预加载缓存
+            LeastRecentlyUsedCacheEvictor(VIDEO_PLAY_CACHE_MAX_BYTES),
             //记录缓存的数据库
             databaseProvider
         )
@@ -272,6 +286,49 @@ object ExoPlayerHelper {
             totalCached += cached
         }
         return totalCached
+    }
+
+    fun preloadVideoWindow(
+        request: MediaRequest,
+        durationMs: Long = VIDEO_PRELOAD_DURATION_MS,
+        shouldCancel: (() -> Boolean)? = null
+    ): Long {
+        val url = getMediaUrls(request.url).firstOrNull() ?: return 0L
+        if (!isDownloadableMediaUrl(url)) return 0L
+        if (shouldCancel?.invoke() == true) {
+            throw kotlinx.coroutines.CancellationException("video preload cancelled")
+        }
+        val preloadBytes = estimatePreloadBytes(durationMs)
+        val dataSource = videoPreloadDataSourceFactory(request.headers).createDataSource()
+        val writer = CacheWriter(
+            dataSource,
+            DataSpec.Builder()
+                .setUri(Uri.parse(url))
+                .setLength(preloadBytes)
+                .build(),
+            null,
+            null
+        )
+        var cancelled = false
+        try {
+            writer.cache()
+        } catch (e: java.io.InterruptedIOException) {
+            cancelled = true
+        } finally {
+            if (shouldCancel?.invoke() == true) {
+                writer.cancel()
+                cancelled = true
+            }
+        }
+        if (cancelled) {
+            throw kotlinx.coroutines.CancellationException("video preload cancelled")
+        }
+        return cache.getCachedBytes(url, 0, preloadBytes)
+    }
+
+    private fun estimatePreloadBytes(durationMs: Long): Long {
+        val seconds = (durationMs / 1000L).coerceAtLeast(1L)
+        return seconds * VIDEO_PRELOAD_BYTES_PER_SECOND
     }
 
     fun isMediaCached(url: String?): Boolean {
@@ -373,5 +430,8 @@ object ExoPlayerHelper {
     )
 
     private const val AUDIO_OFFLINE_CACHE_MAX_BYTES = 4L * 1024 * 1024 * 1024
+    private const val VIDEO_PLAY_CACHE_MAX_BYTES = 512L * 1024 * 1024
+    private const val VIDEO_PRELOAD_DURATION_MS = 5L * 60 * 1000
+    private const val VIDEO_PRELOAD_BYTES_PER_SECOND = 256L * 1024
     private const val COMPLETE_MARKER_VERSION = "media_downloader_v2"
 }

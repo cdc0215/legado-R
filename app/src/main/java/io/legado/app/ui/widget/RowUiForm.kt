@@ -10,9 +10,9 @@ import android.view.View
 import android.widget.TextView
 import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.data.entities.rule.RowUi
-import io.legado.app.databinding.ItemSourceEditBinding
+import io.legado.app.databinding.ItemRowUiTextBinding
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypeface
-import io.legado.app.ui.widget.text.TextInputLayout
 import io.legado.app.utils.dpToPx
 
 object RowUiForm {
@@ -33,6 +33,8 @@ object RowUiForm {
         idOffset: Int = 1000
     ) {
         val inflater = LayoutInflater.from(container.context)
+        container.clipChildren = false
+        container.clipToPadding = false
         container.removeAllViews()
         rows.forEachIndexed { index, rowUi ->
             val row = createRow(inflater, container, rowUi, values, callback)
@@ -71,9 +73,9 @@ object RowUiForm {
         value: String,
         callback: Callback
     ): FormRow {
-        val binding = ItemSourceEditBinding.inflate(inflater, container, false)
-        RowUiViewFactory.applyModernRowUiStyle(rowUi, binding.root)
-        bindTextInput(rowUi, binding.textInputLayout, callback)
+        val binding = ItemRowUiTextBinding.inflate(inflater, container, false)
+        bindTextInput(rowUi, binding, callback)
+        binding.vUnderline.setBackgroundColor(container.context.accentColor)
         val editText = binding.editText
         if (rowUi.type == RowUi.Type.password) {
             editText.inputType =
@@ -96,9 +98,14 @@ object RowUiForm {
             ) = Unit
 
             override fun afterTextChanged(s: Editable?) {
+                updateTextInputLabel(binding)
                 callback.onValueChanged(rowUi, s?.toString().orEmpty())
             }
         })
+        editText.setOnFocusChangeListener { _, _ ->
+            updateTextInputLabel(binding)
+        }
+        updateTextInputLabel(binding)
         return FormRow(binding.root) {
             rowUi.style().apply {
                 when (layout_justifySelf) {
@@ -216,12 +223,23 @@ object RowUiForm {
 
     private fun bindTextInput(
         rowUi: RowUi,
-        textInputLayout: TextInputLayout,
+        binding: ItemRowUiTextBinding,
         callback: Callback
     ) {
         callback.resolveViewName(rowUi, rowUi.name) { name ->
-            textInputLayout.hint = name
+            binding.tvLabel.text = name
+            binding.editText.hint = name
+            val accentColor = binding.root.context.accentColor
+            binding.tvLabel.setTextColor(accentColor)
+            binding.editText.setHintTextColor(accentColor)
         }
+    }
+
+    private fun updateTextInputLabel(binding: ItemRowUiTextBinding) {
+        val shouldFloat = binding.editText.hasFocus()
+            || !binding.editText.text.isNullOrEmpty()
+        binding.tvLabel.visibility = if (shouldFloat) View.VISIBLE else View.GONE
+        binding.editText.hint = if (shouldFloat) null else binding.tvLabel.text
     }
 
     private fun bindActionTouch(

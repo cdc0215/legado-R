@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import io.legado.app.R
+import io.legado.app.lib.theme.primaryTextColor
 
 class SwitchVideoAdapter<T>(
     context: Context,
@@ -20,6 +21,7 @@ class SwitchVideoAdapter<T>(
         val textView = view.findViewById<TextView>(R.id.text1)
         val item = dataList[position]
         textView.text = titleProvider(item)
+        textView.setTextColor(context.primaryTextColor)
         return view
     }
 }

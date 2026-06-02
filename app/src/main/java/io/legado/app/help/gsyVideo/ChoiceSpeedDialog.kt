@@ -7,10 +7,13 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import io.legado.app.R
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.navigationBarHeight
 
 class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
     mContext, R.style.dialog_style
@@ -46,6 +49,8 @@ class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
         this.data = data
         val inflater = LayoutInflater.from(mContext)
         val view: View = inflater.inflate(R.layout.switch_speed_video_dialog, null)
+        val bottomPadding = mContext.navigationBarHeight + 8.dpToPx()
+        view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, bottomPadding)
         listView = view.findViewById(R.id.switch_dialog_list)
         setContentView(view)
         adapter = SwitchVideoAdapter(mContext, data) { item -> item.toString() + "X" }
@@ -55,7 +60,7 @@ class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
         val lp = dialogWindow!!.attributes
         val d = mContext.resources.displayMetrics // 获取屏幕宽、高用
         lp.width = (d.widthPixels * 0.3).toInt() // 宽度设置为屏幕的0.3
-        lp.height = d.heightPixels
+        lp.height = WindowManager.LayoutParams.MATCH_PARENT
         lp.gravity = Gravity.END // 设置靠右对齐
         dialogWindow.setAttributes(lp)
     }

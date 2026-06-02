@@ -20,9 +20,13 @@ class ExoVideoManager: GSYVideoBaseManager() {
         super.init()
     }
 
+    private var onMediaKeyTransition: ((String) -> Unit)? = null
+
     @OptIn(UnstableApi::class)
     override fun getPlayManager(): ExoPlayerManager {
-        return ExoPlayerManager()
+        return ExoPlayerManager().apply {
+            setOnMediaKeyTransitionListener(onMediaKeyTransition)
+        }
     }
 
 //    fun prepare(
@@ -70,6 +74,22 @@ class ExoVideoManager: GSYVideoBaseManager() {
             return
         }
         (playerManager as ExoPlayerManager).next()
+    }
+
+    @OptIn(UnstableApi::class)
+    fun appendNext(key: String, url: String, headers: Map<String, String>) {
+        (playerManager as? ExoPlayerManager)?.appendNext(key, url, headers)
+    }
+
+    @OptIn(UnstableApi::class)
+    fun hasNext(): Boolean {
+        return (playerManager as? ExoPlayerManager)?.hasNext() == true
+    }
+
+    @OptIn(UnstableApi::class)
+    fun setOnMediaKeyTransitionListener(listener: ((String) -> Unit)?) {
+        onMediaKeyTransition = listener
+        (playerManager as? ExoPlayerManager)?.setOnMediaKeyTransitionListener(listener)
     }
 
 }
