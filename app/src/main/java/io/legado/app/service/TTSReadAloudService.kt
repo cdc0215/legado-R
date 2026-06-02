@@ -32,6 +32,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     private var retryParagraphKey: String? = null
     private var retryingTtsInit = false
     private var ttsVoiceName: String? = null
+    private var queuedUntilIndex = -1
 
     @Volatile
     private var activeUtteranceId: String? = null
@@ -69,6 +70,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     @Synchronized
     fun clearTTS(forgetVoice: Boolean = false) {
         activeUtteranceId = null
+        queuedUntilIndex = -1
         speakGeneration++
         ttsInitGeneration++
         if (forgetVoice) {
@@ -145,6 +147,7 @@ class TTSReadAloudService : BaseReadAloudService() {
 
     override fun playStop() {
         activeUtteranceId = null
+        queuedUntilIndex = -1
         speakGeneration++
         retryParagraphKey = null
         retryingTtsInit = false
@@ -163,8 +166,9 @@ class TTSReadAloudService : BaseReadAloudService() {
                 text = text.substring(paragraphStartPos.coerceAtMost(text.length))
             }
             if (!text.matches(AppPattern.notReadAloudRegex)) {
-                val utteranceId = "${AppConst.APP_TAG}${speakGeneration}_$nowSpeak"
+                val utteranceId = utteranceId(nowSpeak)
                 activeUtteranceId = utteranceId
+                queuedUntilIndex = nowSpeak
                 val result = tts.runCatching {
                     speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                 }.getOrElse {
@@ -172,7 +176,10 @@ class TTSReadAloudService : BaseReadAloudService() {
                     TextToSpeech.ERROR
                 }
                 if (result == TextToSpeech.ERROR) {
+                    queuedUntilIndex = -1
                     handleSpeakError("tts speak error", retryWithReinit = true)
+                } else {
+                    queueUpcomingUtterances(tts)
                 }
                 return
             }
@@ -191,7 +198,52 @@ class TTSReadAloudService : BaseReadAloudService() {
     }
 
     private fun isActiveUtterance(utteranceId: String?): Boolean {
-        return utteranceId != null && utteranceId == activeUtteranceId
+        val index = utteranceIndex(utteranceId) ?: return false
+        return index in 0..queuedUntilIndex && index in contentList.indices
+    }
+
+    private fun utteranceId(index: Int): String {
+        return "${AppConst.APP_TAG}${speakGeneration}_$index"
+    }
+
+    private fun utteranceIndex(utteranceId: String?): Int? {
+        val prefix = "${AppConst.APP_TAG}${speakGeneration}_"
+        return utteranceId
+            ?.takeIf { it.startsWith(prefix) }
+            ?.substring(prefix.length)
+            ?.toIntOrNull()
+    }
+
+    @Synchronized
+    private fun syncToUtteranceIndex(index: Int) {
+        while (nowSpeak < index && nowSpeak in contentList.indices) {
+            moveToNextParagraph()
+        }
+    }
+
+    @Synchronized
+    private fun queueUpcomingUtterances(tts: TextToSpeech) {
+        if (pause || queuedUntilIndex < nowSpeak) return
+        var index = queuedUntilIndex + 1
+        var preloadLength = 0
+        while (index < contentList.size && preloadLength < minReadAloudPreloadLength()) {
+            val text = contentList[index]
+            if (text.matches(AppPattern.notReadAloudRegex)) {
+                return
+            }
+            val result = tts.runCatching {
+                speak(text, TextToSpeech.QUEUE_ADD, null, utteranceId(index))
+            }.getOrElse {
+                AppLog.put("tts preload error\n${it.localizedMessage}", it)
+                TextToSpeech.ERROR
+            }
+            if (result == TextToSpeech.ERROR) {
+                return
+            }
+            queuedUntilIndex = index
+            preloadLength += text.length
+            index++
+        }
     }
 
     @Synchronized
@@ -201,6 +253,7 @@ class TTSReadAloudService : BaseReadAloudService() {
             AppLog.putDebug("$message, retry current paragraph")
             retryParagraphKey = paragraphKey
             activeUtteranceId = null
+            queuedUntilIndex = -1
             speakGeneration++
             if (retryWithReinit) {
                 retryingTtsInit = true
@@ -213,6 +266,7 @@ class TTSReadAloudService : BaseReadAloudService() {
         }
         retryParagraphKey = null
         activeUtteranceId = null
+        queuedUntilIndex = -1
         if (!moveToNextParagraph()) {
             nextChapter()
             return
@@ -239,6 +293,7 @@ class TTSReadAloudService : BaseReadAloudService() {
     override fun pauseReadAloud(abandonFocus: Boolean) {
         super.pauseReadAloud(abandonFocus)
         activeUtteranceId = null
+        queuedUntilIndex = -1
         speakGeneration++
         retryParagraphKey = null
         retryingTtsInit = false
@@ -258,6 +313,7 @@ class TTSReadAloudService : BaseReadAloudService() {
 
         override fun onStart(s: String) {
             runActiveUtteranceCallback(s) {
+                utteranceIndex(s)?.let { syncToUtteranceIndex(it) }
                 LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
                 textChapter?.let {
                     if (nowSpeak !in contentList.indices) return@runActiveUtteranceCallback
@@ -275,13 +331,14 @@ class TTSReadAloudService : BaseReadAloudService() {
         override fun onDone(s: String) {
             runActiveUtteranceCallback(s) {
                 LogUtils.d(TAG, "onDone utteranceId:$s")
-                nextParagraph()
+                nextParagraph(s)
             }
         }
 
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
             super.onRangeStart(utteranceId, start, end, frame)
             runActiveUtteranceCallback(utteranceId) {
+                utteranceIndex(utteranceId)?.let { syncToUtteranceIndex(it) }
                 val msg =
                     "onRangeStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId start:$start end:$end frame:$frame"
                 LogUtils.d(TAG, msg)
@@ -299,6 +356,7 @@ class TTSReadAloudService : BaseReadAloudService() {
 
         override fun onError(utteranceId: String?, errorCode: Int) {
             runActiveUtteranceCallback(utteranceId) {
+                utteranceIndex(utteranceId)?.let { syncToUtteranceIndex(it) }
                 LogUtils.d(
                     TAG,
                     "onError nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId errorCode:$errorCode"
@@ -307,19 +365,29 @@ class TTSReadAloudService : BaseReadAloudService() {
             }
         }
 
-        private fun nextParagraph() {
+        private fun nextParagraph(utteranceId: String?) {
+            val index = utteranceIndex(utteranceId) ?: return
+            if (index < nowSpeak) return
+            syncToUtteranceIndex(index)
             activeUtteranceId = null
             retryParagraphKey = null
             if (!moveToNextParagraph()) {
                 nextChapter()
                 return
             }
-            speakCurrentParagraph()
+            textToSpeech?.let { tts ->
+                if (queuedUntilIndex >= nowSpeak) {
+                    queueUpcomingUtterances(tts)
+                } else {
+                    speakCurrentParagraph()
+                }
+            } ?: speakCurrentParagraph()
         }
 
         @Deprecated("Deprecated in Java")
         override fun onError(s: String) {
             runActiveUtteranceCallback(s) {
+                utteranceIndex(s)?.let { syncToUtteranceIndex(it) }
                 LogUtils.d(TAG, "onError nowSpeak:$nowSpeak pageIndex:$pageIndex s:$s")
                 handleSpeakError("tts utterance error", retryWithReinit = true)
             }

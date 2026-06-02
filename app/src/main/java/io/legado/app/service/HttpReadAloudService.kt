@@ -97,6 +97,17 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var playErrorNo = 0
     private val downloadTaskActiveLock = Mutex()
 
+    private data class PreparedMediaItem(
+        val textLength: Int,
+        val mediaItem: MediaItem
+    )
+
+    private data class PreparedMediaSource(
+        val textLength: Int,
+        val mediaSource: MediaSource,
+        val downloader: Downloader
+    )
+
     override fun onCreate() {
         super.onCreate()
         exoPlayer.addListener(this)
@@ -177,35 +188,38 @@ class HttpReadAloudService : BaseReadAloudService(),
             downloadTaskActiveLock.withLock {
                 ensureActive()
                 val httpTts = httpTtsSnapshot ?: throw NoStackTraceException("tts is null")
+                val firstMediaItems = arrayListOf<MediaItem>()
+                var firstMediaLength = 0
+                var firstMediaItemsAdded = false
                 contentList.forEachIndexed { index, content ->
                     ensureActive()
                     if (index < nowSpeak) return@forEachIndexed
-                    var text = content
-                    if (paragraphStartPos > 0 && index == nowSpeak) {
-                        text = text.substring(paragraphStartPos.coerceAtMost(text.length))
-                    }
-                    val fileName = md5SpeakFileName(text)
-                    val speakText = text.replace(AppPattern.notReadAloudRegex, "")
-                    if (speakText.isEmpty()) {
-                        AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$text")
-                        createSilentSound(fileName)
-                    } else if (!hasSpeakFile(fileName)) {
-                        runCatching {
-                            val inputStream = getSpeakStream(httpTts, speakText)
-                            if (inputStream != null) {
-                                createSpeakFile(fileName, inputStream)
-                            } else {
-                                createSilentSound(fileName)
+                    val prepared = runCatching {
+                        prepareMediaItem(httpTts, index, content)
+                    }.onFailure {
+                        if (it !is CancellationException) pauseReadAloud()
+                        return@execute
+                    }.getOrThrow()
+                    if (!firstMediaItemsAdded) {
+                        firstMediaItems.add(prepared.mediaItem)
+                        firstMediaLength += prepared.textLength
+                        if (firstMediaLength >= httpStartPreloadLength()
+                            || index == contentList.lastIndex
+                        ) {
+                            firstMediaItemsAdded = true
+                            launch(Main) {
+                                exoPlayer.addMediaItems(firstMediaItems)
                             }
-                        }.onFailure {
-                            if (it !is CancellationException) pauseReadAloud()
-                            return@execute
+                        }
+                    } else {
+                        launch(Main) {
+                            exoPlayer.addMediaItem(prepared.mediaItem)
                         }
                     }
-                    val file = getSpeakFileAsMd5(fileName)
-                    val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
+                }
+                if (!firstMediaItemsAdded && firstMediaItems.isNotEmpty()) {
                     launch(Main) {
-                        exoPlayer.addMediaItem(mediaItem)
+                        exoPlayer.addMediaItems(firstMediaItems)
                     }
                 }
                 preDownloadAudios(httpTts)
@@ -220,8 +234,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         val contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0, 1)
             .splitToSequence("\n")
             .filter { it.isNotEmpty() }
-            .take(10)
-            .toList()
+            .takePreloadContentList(maxLength = httpPreloadAheadLength())
         contentList.forEach { content ->
             currentCoroutineContext().ensureActive()
             val fileName = md5SpeakFileName(content, textChapter)
@@ -265,24 +278,41 @@ class HttpReadAloudService : BaseReadAloudService(),
                     }
                 }
                 try {
+                    val firstMediaSources = arrayListOf<MediaSource>()
+                    var firstMediaLength = 0
+                    var firstMediaSourcesAdded = false
                     contentList.forEachIndexed { index, content ->
                         ensureActive()
                         if (index < nowSpeak) return@forEachIndexed
-                        var text = content
-                        if (paragraphStartPos > 0 && index == nowSpeak) {
-                            text = text.substring(paragraphStartPos.coerceAtMost(text.length))
+                        val prepared = prepareMediaSource(httpTts, index, content)
+                        if (!firstMediaSourcesAdded) {
+                            runCatching {
+                                prepared.downloader.download(null)
+                            }.onFailure {
+                                if (it is CancellationException) throw it
+                                pauseReadAloud()
+                                return@execute
+                            }
+                            firstMediaSources.add(prepared.mediaSource)
+                            firstMediaLength += prepared.textLength
+                            if (firstMediaLength >= httpStartPreloadLength()
+                                || index == contentList.lastIndex
+                            ) {
+                                firstMediaSourcesAdded = true
+                                launch(Main) {
+                                    exoPlayer.addMediaSources(firstMediaSources)
+                                }
+                            }
+                        } else {
+                            downloaderChannel.send(prepared.downloader)
+                            launch(Main) {
+                                exoPlayer.addMediaSource(prepared.mediaSource)
+                            }
                         }
-                        val speakText = text.replace(AppPattern.notReadAloudRegex, "")
-                        if (speakText.isEmpty()) {
-                            AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$speakText")
-                        }
-                        val fileName = md5SpeakFileName(text)
-                        val dataSourceFactory = createDataSourceFactory(httpTts, speakText)
-                        val downloader = createDownloader(dataSourceFactory, fileName)
-                        downloaderChannel.send(downloader)
-                        val mediaSource = createMediaSource(dataSourceFactory, fileName)
+                    }
+                    if (!firstMediaSourcesAdded && firstMediaSources.isNotEmpty()) {
                         launch(Main) {
-                            exoPlayer.addMediaSource(mediaSource)
+                            exoPlayer.addMediaSources(firstMediaSources)
                         }
                     }
                     preDownloadAudiosStream(httpTts, downloaderChannel)
@@ -303,8 +333,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         val contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0, 1)
             .splitToSequence("\n")
             .filter { it.isNotEmpty() }
-            .take(10)
-            .toList()
+            .takePreloadContentList(maxLength = httpPreloadAheadLength())
         contentList.forEach { content ->
             currentCoroutineContext().ensureActive()
             val fileName = md5SpeakFileName(content, textChapter)
@@ -350,6 +379,79 @@ class HttpReadAloudService : BaseReadAloudService(),
             .setUpstreamDataSourceFactory(upstreamFactory)
             .setCacheWriteDataSinkFactory(cacheDataSinkFactory)
         return factory
+    }
+
+    private suspend fun prepareMediaItem(
+        httpTts: HttpTTS,
+        index: Int,
+        content: String
+    ): PreparedMediaItem {
+        val text = getSpeakContent(index, content)
+        val fileName = md5SpeakFileName(text)
+        val speakText = text.replace(AppPattern.notReadAloudRegex, "")
+        if (speakText.isEmpty()) {
+            AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$text")
+            createSilentSound(fileName)
+        } else if (!hasSpeakFile(fileName)) {
+            val inputStream = getSpeakStream(httpTts, speakText)
+            if (inputStream != null) {
+                createSpeakFile(fileName, inputStream)
+            } else {
+                createSilentSound(fileName)
+            }
+        }
+        val file = getSpeakFileAsMd5(fileName)
+        return PreparedMediaItem(text.length, MediaItem.fromUri(Uri.fromFile(file)))
+    }
+
+    private fun prepareMediaSource(
+        httpTts: HttpTTS,
+        index: Int,
+        content: String
+    ): PreparedMediaSource {
+        val text = getSpeakContent(index, content)
+        val speakText = text.replace(AppPattern.notReadAloudRegex, "")
+        if (speakText.isEmpty()) {
+            AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$text")
+        }
+        val fileName = md5SpeakFileName(text)
+        val dataSourceFactory = createDataSourceFactory(httpTts, speakText)
+        return PreparedMediaSource(
+            text.length,
+            createMediaSource(dataSourceFactory, fileName),
+            createDownloader(dataSourceFactory, fileName)
+        )
+    }
+
+    private fun getSpeakContent(index: Int, content: String): String {
+        if (paragraphStartPos > 0 && index == nowSpeak) {
+            return content.substring(paragraphStartPos.coerceAtMost(content.length))
+        }
+        return content
+    }
+
+    private fun httpPreloadAheadLength(): Int {
+        return minReadAloudPreloadLength() * 2
+    }
+
+    private fun httpStartPreloadLength(): Int {
+        return minReadAloudPreloadLength()
+    }
+
+    private fun Sequence<String>.takePreloadContentList(
+        maxCount: Int = 30,
+        maxLength: Int = minReadAloudPreloadLength()
+    ): List<String> {
+        val list = arrayListOf<String>()
+        var length = 0
+        for (content in this) {
+            list.add(content)
+            length += content.length
+            if (list.size >= maxCount || length >= maxLength) {
+                break
+            }
+        }
+        return list
     }
 
     private fun createDownloader(factory: CacheDataSource.Factory, fileName: String): Downloader {

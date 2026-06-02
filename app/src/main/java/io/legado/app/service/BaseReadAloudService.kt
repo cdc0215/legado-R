@@ -119,6 +119,7 @@ abstract class BaseReadAloudService : BaseService(),
         }
 
         private const val TAG = "BaseReadAloudService"
+        private const val MIN_READ_ALOUD_PRELOAD_LENGTH = 300
 
     }
 
@@ -208,6 +209,10 @@ abstract class BaseReadAloudService : BaseService(),
     var paragraphStartPos = 0
     var readAloudByPage = false
         private set
+
+    internal fun minReadAloudPreloadLength(): Int {
+        return MIN_READ_ALOUD_PRELOAD_LENGTH
+    }
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
