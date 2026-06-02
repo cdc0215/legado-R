@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.os.Bundle
@@ -7,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.LinearInterpolator
 import android.widget.SeekBar
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
@@ -33,6 +35,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
     SpeakEngineDialog.CallBack {
     private val callBack: CallBack? get() = activity as? CallBack
     private val binding by viewBinding(DialogReadAloudBinding::bind)
+    private var loadingAnimator: ObjectAnimator? = null
 
     override fun onStart() {
         super.onStart()
@@ -54,6 +57,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
+        stopLoadingAnimation()
         (activity as ReadBookActivity).bottomDialog--
         (activity as? ReadBookActivity)?.clearReadAloudFloatingAvoidance(
             EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_DIALOG
@@ -225,14 +229,42 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
     }
 
     private fun upPlayState() {
-        if (!BaseReadAloudService.pause) {
+        if (BaseReadAloudService.loading) {
+            binding.ivPlayPause.setImageResource(R.drawable.ic_refresh_black_24dp)
+            binding.ivPlayPause.contentDescription = getString(R.string.loading)
+            binding.ivPlayPause.isEnabled = false
+            startLoadingAnimation()
+        } else if (!BaseReadAloudService.pause) {
+            stopLoadingAnimation()
             binding.ivPlayPause.setImageResource(R.drawable.ic_pause_24dp)
             binding.ivPlayPause.contentDescription = getString(R.string.pause)
+            binding.ivPlayPause.isEnabled = true
         } else {
+            stopLoadingAnimation()
             binding.ivPlayPause.setImageResource(R.drawable.ic_play_24dp)
             binding.ivPlayPause.contentDescription = getString(R.string.audio_play)
+            binding.ivPlayPause.isEnabled = true
         }
         binding.ivPlayPause.setColorFilter(ReaderSheetStyle.resolve(requireContext()).textColor)
+    }
+
+    private fun startLoadingAnimation() {
+        if (loadingAnimator?.isStarted == true) return
+        loadingAnimator?.cancel()
+        loadingAnimator = ObjectAnimator
+            .ofFloat(binding.ivPlayPause, View.ROTATION, 0f, 360f)
+            .apply {
+                duration = 900
+                repeatCount = ObjectAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                start()
+            }
+    }
+
+    private fun stopLoadingAnimation() {
+        loadingAnimator?.cancel()
+        loadingAnimator = null
+        binding.ivPlayPause.rotation = 0f
     }
 
     private fun upSeekTimer() {

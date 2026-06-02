@@ -2,6 +2,7 @@
 
 package io.legado.app.service
 
+import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
@@ -35,6 +36,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.WindowManager
+import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -107,6 +109,10 @@ abstract class BaseReadAloudService : BaseService(),
             private set
 
         @JvmStatic
+        var loading = false
+            private set
+
+        @JvmStatic
         var timeMinute: Int = 0
             private set
 
@@ -163,6 +169,7 @@ abstract class BaseReadAloudService : BaseService(),
     private var floatingView: View? = null
     private var floatingCoverView: ImageView? = null
     private var floatingPlayPauseView: ImageView? = null
+    private var floatingLoadingAnimator: ObjectAnimator? = null
     private var appFloatingActivity: Activity? = null
     private var readBookActivityActive = false
     private var currentAvoidanceSource: String? = null
@@ -408,8 +415,31 @@ abstract class BaseReadAloudService : BaseService(),
             return
         }
         floatingPlayPauseView?.setImageResource(
-            if (pause) R.drawable.ic_play_24dp else R.drawable.ic_pause_24dp
+            when {
+                loading -> R.drawable.ic_refresh_black_24dp
+                pause -> R.drawable.ic_play_24dp
+                else -> R.drawable.ic_pause_24dp
+            }
         )
+        updateFloatingLoadingAnimation()
+    }
+
+    private fun updateFloatingLoadingAnimation() {
+        val view = floatingPlayPauseView ?: return
+        if (loading) {
+            if (floatingLoadingAnimator?.isStarted == true) return
+            floatingLoadingAnimator?.cancel()
+            floatingLoadingAnimator = ObjectAnimator.ofFloat(view, View.ROTATION, 0f, 360f).apply {
+                duration = 900
+                repeatCount = ObjectAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                start()
+            }
+        } else {
+            floatingLoadingAnimator?.cancel()
+            floatingLoadingAnimator = null
+            view.rotation = 0f
+        }
     }
 
     private fun removeReadAloudFloatingWindow() {
@@ -432,6 +462,9 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun clearReadAloudFloatingRefs() {
+        floatingLoadingAnimator?.cancel()
+        floatingLoadingAnimator = null
+        floatingPlayPauseView?.rotation = 0f
         floatingView = null
         floatingParams = null
         floatingWindowManager = null
@@ -763,6 +796,7 @@ abstract class BaseReadAloudService : BaseService(),
         releaseWakeLocks()
         isRun = false
         pause = true
+        loading = false
         if (runningClass == this::class.java) {
             runningClass = null
         }
@@ -867,6 +901,7 @@ abstract class BaseReadAloudService : BaseService(),
         acquireWakeLocks()
         isRun = true
         pause = false
+        loading = false
         needResumeOnAudioFocusGain = false
         needResumeOnCallStateIdle = false
         upReadAloudNotification()
@@ -882,6 +917,7 @@ abstract class BaseReadAloudService : BaseService(),
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
         releaseWakeLocks()
         pause = true
+        loading = false
         if (abandonFocus) {
             abandonFocus()
         }
@@ -933,6 +969,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun resumeReadAloudInternal() {
         pause = false
+        loading = false
         needResumeOnAudioFocusGain = false
         needResumeOnCallStateIdle = false
         upReadAloudNotification()
@@ -946,6 +983,16 @@ abstract class BaseReadAloudService : BaseService(),
 
     fun upTtsProgress(progress: Int) {
         postEvent(EventBus.TTS_PROGRESS, progress)
+    }
+
+    protected fun upReadAloudLoading(loading: Boolean) {
+        if (!isRun || pause || BaseReadAloudService.loading == loading) {
+            return
+        }
+        BaseReadAloudService.loading = loading
+        upReadAloudNotification()
+        updateReadAloudFloatingPlayState()
+        postEvent(EventBus.ALOUD_STATE, if (loading) Status.LOADING else Status.PLAY)
     }
 
     internal fun moveReadBookToPrevPageForReadAloud() {
@@ -1153,6 +1200,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun upMediaMetadata() {
         var nTitle: String = when {
+            loading -> getString(R.string.loading)
             pause -> getString(R.string.read_aloud_pause)
             timeMinute > 0 -> getString(
                 R.string.read_aloud_timer,
@@ -1232,6 +1280,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun createNotification(): NotificationCompat.Builder {
         var nTitle: String = when {
+            loading -> getString(R.string.loading)
             pause -> getString(R.string.read_aloud_pause)
             timeMinute > 0 -> getString(
                 R.string.read_aloud_timer,

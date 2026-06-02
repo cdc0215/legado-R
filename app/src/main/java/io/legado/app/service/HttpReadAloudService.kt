@@ -138,6 +138,7 @@ class HttpReadAloudService : BaseReadAloudService(),
             nextChapter()
         } else {
             super.play()
+            upReadAloudLoading(true)
             if (AppConfig.streamReadAloudAudio) {
                 downloadAndPlayAudiosStream()
             } else {
@@ -209,6 +210,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                             firstMediaItemsAdded = true
                             launch(Main) {
                                 exoPlayer.addMediaItems(firstMediaItems)
+                                upReadAloudLoading(false)
                             }
                         }
                     } else {
@@ -220,6 +222,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                 if (!firstMediaItemsAdded && firstMediaItems.isNotEmpty()) {
                     launch(Main) {
                         exoPlayer.addMediaItems(firstMediaItems)
+                        upReadAloudLoading(false)
                     }
                 }
                 preDownloadAudios(httpTts)
@@ -301,6 +304,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                                 firstMediaSourcesAdded = true
                                 launch(Main) {
                                     exoPlayer.addMediaSources(firstMediaSources)
+                                    upReadAloudLoading(false)
                                 }
                             }
                         } else {
@@ -313,6 +317,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                     if (!firstMediaSourcesAdded && firstMediaSources.isNotEmpty()) {
                         launch(Main) {
                             exoPlayer.addMediaSources(firstMediaSources)
+                            upReadAloudLoading(false)
                         }
                     }
                     preDownloadAudiosStream(httpTts, downloaderChannel)
@@ -431,11 +436,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun httpPreloadAheadLength(): Int {
-        return minReadAloudPreloadLength() * 2
+        return minReadAloudPreloadLength()
     }
 
     private fun httpStartPreloadLength(): Int {
-        return minReadAloudPreloadLength()
+        return 60
     }
 
     private fun Sequence<String>.takePreloadContentList(
