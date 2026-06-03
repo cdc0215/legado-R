@@ -3,6 +3,8 @@ package io.legado.app.help.gsyVideo
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -32,6 +34,8 @@ import master.flame.danmaku.ui.widget.DanmakuView
 import java.io.File
 import java.io.FileInputStream
 
+private const val PLAYBACK_LOAD_TIMEOUT_MS = 25_000L
+
 class VideoPlayer: StandardGSYVideoPlayer {
     constructor(context: Context?, fullFlag: Boolean?) : super(context, fullFlag) //必须的,全屏时依靠这个构建知道获取全屏布局
     constructor(context: Context?) : super(context)
@@ -43,6 +47,13 @@ class VideoPlayer: StandardGSYVideoPlayer {
     var onPlaySpeedChanged: ((Float) -> Unit)? = null
     private var btnNext: ImageView? = null
     private var tipView: TextView? = null
+    private val playbackLoadTimeoutHandler = Handler(Looper.getMainLooper())
+    private val playbackLoadTimeoutRunnable = Runnable {
+        if (isWaitingForPlaybackStart()) {
+            onPlaybackLoadTimeout?.invoke() ?: showPlayAddressError()
+        }
+    }
+    var onPlaybackLoadTimeout: (() -> Unit)? = null
     private var isChanging = false
     private var isLongPressSpeed = false
     private var mChangeEpisode = false
@@ -239,6 +250,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     override fun onPrepared() {
         super.onPrepared()
+        cancelPlaybackLoadTimeout()
+        hidePlayAddressError()
         onPrepareDanmaku(this)
         VideoPlay.queuePreparedNextEpisode()
     }
@@ -263,6 +276,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     override fun onVideoResume(isResume: Boolean) {
         super.onVideoResume(isResume)
+        cancelPlaybackLoadTimeout()
         danmakuOnResume()
         ensureVideoSurfaceBound()
     }
@@ -494,8 +508,15 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
 
     override fun setUp(url: String?, cacheWithPlay: Boolean, cachePath: File?, title: String?): Boolean {
+        cancelPlaybackLoadTimeout()
         initDanmaku()
         return super.setUp(url, cacheWithPlay, cachePath, title)
+    }
+
+    override fun startPlayLogic() {
+        hidePlayAddressError()
+        startPlaybackLoadTimeout()
+        super.startPlayLogic()
     }
 
     private fun initDanmaku() {
@@ -647,7 +668,54 @@ class VideoPlayer: StandardGSYVideoPlayer {
         findViewById<TextView?>(R.id.title)?.text = title.orEmpty()
     }
 
+    fun showResolvingLoading(show: Boolean) {
+        getCurrentPlayer().post {
+            val player = getCurrentPlayer()
+            if (show) {
+                player.findViewById<View?>(R.id.play_error)?.visibility = GONE
+                player.findViewById<View?>(R.id.start)?.visibility = INVISIBLE
+            }
+            player.findViewById<View?>(R.id.resolving_loading)?.visibility =
+                if (show) VISIBLE else GONE
+        }
+    }
+
+    fun showPlayAddressError() {
+        getCurrentPlayer().post {
+            val player = getCurrentPlayer()
+            cancelPlaybackLoadTimeout()
+            player.findViewById<View?>(R.id.resolving_loading)?.visibility = GONE
+            player.findViewById<View?>(R.id.loading)?.visibility = INVISIBLE
+            player.findViewById<View?>(R.id.start)?.visibility = INVISIBLE
+            player.findViewById<View?>(R.id.play_error)?.visibility = VISIBLE
+        }
+    }
+
+    fun hidePlayAddressError() {
+        getCurrentPlayer().post {
+            getCurrentPlayer().findViewById<View?>(R.id.play_error)?.visibility = GONE
+        }
+    }
+
+    private fun startPlaybackLoadTimeout() {
+        cancelPlaybackLoadTimeout()
+        playbackLoadTimeoutHandler.postDelayed(
+            playbackLoadTimeoutRunnable,
+            PLAYBACK_LOAD_TIMEOUT_MS
+        )
+    }
+
+    private fun cancelPlaybackLoadTimeout() {
+        playbackLoadTimeoutHandler.removeCallbacks(playbackLoadTimeoutRunnable)
+    }
+
+    private fun isWaitingForPlaybackStart(): Boolean {
+        return mCurrentState == CURRENT_STATE_PREPAREING ||
+                mCurrentState == CURRENT_STATE_PLAYING_BUFFERING_START
+    }
+
     fun onSeamlessEpisodeChanged(title: String?) {
+        hidePlayAddressError()
         nextUI()
         updateTitle(title)
         resetDanmaku()
@@ -714,6 +782,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     }
 
     override fun onError(what: Int, extra: Int) {
+        cancelPlaybackLoadTimeout()
         super.onError(what, extra)
         VideoPlay.saveRead()
         mSeekOnStart = VideoPlay.durChapterPos.toLong()
@@ -734,6 +803,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
             val gsyVideoPlayer = gsyBaseVideoPlayer as VideoPlayer
             //对弹幕设置偏移记录
 //            gsyVideoPlayer.mDanmakuView = this.mDanmakuView
+            gsyVideoPlayer.onPlaybackLoadTimeout = this.onPlaybackLoadTimeout
             gsyVideoPlayer.mDanmakuStartSeekPosition = this.getCurrentPositionWhenPlaying()
             onPrepareDanmaku(gsyVideoPlayer)
         }
@@ -761,6 +831,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
     }
 
     override fun release() {
+        cancelPlaybackLoadTimeout()
         super.release()
         releaseDanmaku(this)
     }
@@ -797,6 +868,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     override fun onVideoResume() {
         super.onVideoResume()
+        cancelPlaybackLoadTimeout()
         ensureVideoSurfaceBound()
     }
 

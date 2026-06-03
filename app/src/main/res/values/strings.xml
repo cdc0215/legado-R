@@ -1604,6 +1604,8 @@
     <string name="float_window">悬浮窗</string>
     <string name="playback_speed">倍速</string>
     <string name="video_play">视频播放</string>
+    <string name="video_resolving_play_url">正在获取播放地址</string>
+    <string name="video_play_url_unplayable">播放地址不可用</string>
     <string name="no_more_chapter">没有更多章节</string>
     <string name="overlay">叠加</string>
     <string name="margin">间距</string>

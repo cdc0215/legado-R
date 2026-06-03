@@ -1575,6 +1575,8 @@
     <string name="ai_tool_round_limit_summary">工具调用轮次已达到上限，且模型没有返回总结</string>
     <string name="epub_button_pressed">按钮已触发</string>
     <string name="epub_media_not_supported">EPUB 内嵌媒体已识别，当前原生阅读页暂不直接播放</string>
+    <string name="video_resolving_play_url">正在获取播放地址</string>
+    <string name="video_play_url_unplayable">播放地址不可用</string>
     <string name="epub_footnote_load_failed">注解加载失败</string>
     <string name="ai_restore_thinking">正在思考中</string>
     <string name="read_record_date_pattern">yyyy年MM月dd日</string>

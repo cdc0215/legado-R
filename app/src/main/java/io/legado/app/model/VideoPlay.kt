@@ -47,6 +47,7 @@ import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.about.ReadRecordWidgetStore
@@ -165,27 +166,24 @@ object VideoPlay : CoroutineScope by MainScope(){
         val player = player.getCurrentPlayer()
         if (singleUrl) {
             val mUrl = videoUrl ?: return
+            setResolvingLoading(player, true)
             Coroutine.async(loadScope, IO) {
                 CacheManager.getLong(VIDEO_POS_NAME + mUrl)?.let {
                     player.seekOnStart = it
                 }
                 inBookshelf = true
-                val analyzeUrl = AnalyzeUrl(
-                    mUrl,
-                    source = source,
-                    ruleData = book,
-                    chapter = null
-                )
+                val playLink = preparePlayableLink(resolvePlayLink(mUrl, source, book))
                 withContext(Main) {
-                    player.mapHeadData = analyzeUrl.headerMap
-                    val url = analyzeUrl.url
-                    player.setUp(url, false, File(appCtx.externalCache, "exoplayer"), displayTitle())
-                    preloadVideoWindow("single:$url", url, analyzeUrl.headerMap)
+                    setResolvingLoading(player, false)
+                    player.mapHeadData = playLink.headers.toMutableMap()
+                    player.setUp(playLink.playUrl, false, File(appCtx.externalCache, "exoplayer"), displayTitle())
+                    preloadVideoWindow("single:${playLink.playUrl}", playLink.playUrl, playLink.headers)
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
                 }
             }.onError {
+                setResolvingLoading(player, false)
                 AppLog.put("加载视频链接失败", it, true)
             }
             return
@@ -199,31 +197,31 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
             val ruleContent = s.ruleContent
             if (ruleContent.isNullOrBlank()) {
+                setResolvingLoading(player, true)
                 Coroutine.async(loadScope, IO) {
                     val mUrl = rssArticle.link
                     videoUrl = mUrl
-                    val analyzeUrl = AnalyzeUrl(
-                        mUrl,
-                        source = source,
-                        ruleData = rssArticle
-                    )
+                    val playLink = preparePlayableLink(resolvePlayLink(mUrl, source, rssArticle))
                     withContext(Main) {
-                        player.mapHeadData = analyzeUrl.headerMap
+                        setResolvingLoading(player, false)
+                        player.mapHeadData = playLink.headers.toMutableMap()
                         player.setUp(
-                            analyzeUrl.url,
+                            playLink.playUrl,
                             false,
                             File(appCtx.externalCache, "exoplayer"),
                             rssArticle.title
                         )
-                        preloadVideoWindow("rss:${rssArticle.link}", analyzeUrl.url, analyzeUrl.headerMap)
+                        preloadVideoWindow("rss:${rssArticle.link}", playLink.playUrl, playLink.headers)
                         if (autoPlay) {
                             player.startPlayLogic()
                         }
                     }
                 }.onError {
+                    setResolvingLoading(player, false)
                     AppLog.put("加载订阅源视频链接失败", it, true)
                 }
             } else {
+                setResolvingLoading(player, true)
                 Rss.getContent(loadScope, rssArticle, ruleContent, s)
                     .onSuccess(IO) { content ->
                         val content = content.trim()
@@ -238,21 +236,18 @@ object VideoPlay : CoroutineScope by MainScope(){
                             NetworkUtils.getAbsoluteURL(rssArticle.link, content)
                         }
                         videoUrl = mUrl
-                        val analyzeUrl = AnalyzeUrl(
-                            mUrl,
-                            source = source,
-                            ruleData = rssArticle
-                        )
-                        val playUrl = analyzeUrl.url
+                        val playLink = preparePlayableLink(resolvePlayLink(mUrl, source, rssArticle))
                         withContext(Main) {
-                            player.mapHeadData = analyzeUrl.headerMap
-                            player.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
-                            preloadVideoWindow("rss:${rssArticle.link}", playUrl, analyzeUrl.headerMap)
+                            setResolvingLoading(player, false)
+                            player.mapHeadData = playLink.headers.toMutableMap()
+                            player.setUp(playLink.playUrl, false, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                            preloadVideoWindow("rss:${rssArticle.link}", playLink.playUrl, playLink.headers)
                             if (autoPlay) {
                                 player.startPlayLogic()
                             }
                         }
                     }.onError {
+                        setResolvingLoading(player, false)
                         AppLog.put("加载订阅源为链接的正文失败", it, true)
                     }
             }
@@ -283,95 +278,43 @@ object VideoPlay : CoroutineScope by MainScope(){
             appCtx.toastOnUi("未找到章节")
             return
         }
+        setResolvingLoading(player, true)
         val chapterSource = source as BookSource
         val chapterCacheKey = buildChapterCacheKey(chapterSource, book, chapter)
-        chapter.resourceUrl
-            ?.takeIf { ExoPlayerHelper.isVideoCached(it, book) }
-            ?.let { cachedUrl ->
-                playResolvedChapter(player, chapterSource, book, chapter, cachedUrl, emptyMap())
-                isLoading = false
-                return
+        Coroutine.async(loadScope, IO) {
+            val playableLink = resolveChapterPlayableLink(chapterSource, book, chapter)
+            videoUrl = playableLink.mediaUrl
+            when (val danmaku = chapter.getDanmaku()) {
+                is String -> danmakuStr = danmaku
+                is File -> danmakuFile = danmaku
             }
-        val cached = chapterLinkCache[chapterCacheKey]?.takeIf {
-            System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
-        }
-        if (cached != null) {
-            playResolvedChapter(player, chapterSource, book, chapter, cached.playUrl, cached.headers)
+            val playUrl = playableLink.playUrl
+            if (chapter.resourceUrl != playUrl) {
+                chapter.resourceUrl = playUrl
+                appDb.bookChapterDao.update(chapter)
+            }
+            chapterLinkCache[chapterCacheKey] = playableLink
+            withContext(Main) {
+                setResolvingLoading(player, false)
+                player.mapHeadData = playableLink.headers.toMutableMap()
+                player.setUp(playUrl, false, ExoPlayerHelper.videoBookCacheDir(book), displayTitle(book, chapter))
+                preloadVideoWindow(chapterCacheKey, playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
+                if (autoPlay) {
+                    player.startPlayLogic()
+                }
+                setupSeamlessTransitionListener()
+            }
+            preloadNextEpisode(chapterSource, book)
+        }.onError {
+            setResolvingLoading(player, false)
+            AppLog.put("获取资源链接出错\n$it", it, true)
+        }.onFinally {
             isLoading = false
-            return
         }
-        WebBook.getContent(loadScope, chapterSource, book, chapter)
-            .onSuccess(IO) { content ->
-                val content = content.trim()
-                val mUrl = if (content.isEmpty()) {
-                    throw ContentEmptyException("正文为空")
-                } else if (content.startsWith("<")) { //当作mpd文本
-                    val name = MD5Utils.md5Encode(content) + ".mpd"
-                    val file = FileUtils.createFileIfNotExist(videoTempFile,name)
-                    file.writeText(content)
-                    Uri.fromFile(file).toString()
-                } else {
-                    content
-                }
-                videoUrl = mUrl
-                val analyzeUrl = AnalyzeUrl(
-                    mUrl,
-                    source = source,
-                    ruleData = book,
-                    chapter = chapter
-                )
-                when (val danmaku = chapter.getDanmaku()) {
-                    is String -> danmakuStr = danmaku
-                    is File -> danmakuFile = danmaku
-                }
-                val playUrl = analyzeUrl.url
-                if (chapter.resourceUrl != playUrl) {
-                    chapter.resourceUrl = playUrl
-                    appDb.bookChapterDao.update(chapter)
-                }
-                chapterLinkCache[chapterCacheKey] = CachedPlayLink(
-                    playUrl = playUrl,
-                    headers = analyzeUrl.headerMap.toMap(),
-                    mediaUrl = mUrl,
-                    createdAt = System.currentTimeMillis()
-                )
-                withContext(Main) {
-                    player.mapHeadData = analyzeUrl.headerMap
-                    player.setUp(playUrl, false, ExoPlayerHelper.videoBookCacheDir(book), displayTitle(book, chapter))
-                    preloadVideoWindow(chapterCacheKey, playUrl, analyzeUrl.headerMap, ExoPlayerHelper.videoBookCacheDir(book))
-                    if (autoPlay) {
-                        player.startPlayLogic()
-                    }
-                    setupSeamlessTransitionListener()
-                }
-                preloadNextEpisode(chapterSource, book)
-            }.onError {
-                AppLog.put("获取资源链接出错\n$it", it, true)
-            }
-        isLoading = false
     }
 
-    private fun playResolvedChapter(
-        player: GSYBaseVideoPlayer,
-        source: BookSource,
-        book: Book,
-        chapter: BookChapter,
-        playUrl: String,
-        headers: Map<String, String>
-    ) {
-        videoUrl = playUrl
-        when (val danmaku = chapter.getDanmaku()) {
-            is String -> danmakuStr = danmaku
-            is File -> danmakuFile = danmaku
-        }
-        player.mapHeadData = headers.toMutableMap()
-        player.setUp(playUrl, false, ExoPlayerHelper.videoBookCacheDir(book), displayTitle(book, chapter))
-        preloadVideoWindow(buildChapterCacheKey(source, book, chapter), playUrl, headers, ExoPlayerHelper.videoBookCacheDir(book))
-        if (autoPlay) {
-            player.startPlayLogic()
-        }
-        setupSeamlessTransitionListener()
-        preloadNextEpisode(source, book)
+    private fun setResolvingLoading(player: GSYBaseVideoPlayer, show: Boolean) {
+        (player as? VideoPlayer)?.showResolvingLoading(show)
     }
 
     fun refreshCurrentChapter(player: StandardGSYVideoPlayer) {
@@ -426,27 +369,20 @@ object VideoPlay : CoroutineScope by MainScope(){
                     chapterLinkCache[nextKey]?.takeIf {
                             System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
                         }?.let { cachedLink ->
-                            if (isPlayLinkReachable(cachedLink)) {
-                                withContext(Main) {
-                                    queueNextEpisode(nextKey, cachedLink)
-                                }
-                                return@withLock
+                            val playableLink = preparePlayableLink(cachedLink, nextKey) {
+                                resolveChapterLink(source, book, nextChapter)
                             }
-                            chapterLinkCache.remove(nextKey)
-                        }
-                    val cachedLink = resolvePreloadLink(source, book, nextChapter)
-                        ?: return@withLock
-                    val playableLink = if (isPlayLinkReachable(cachedLink)) {
-                        cachedLink
-                    } else {
-                        val refreshedLink = resolvePreloadLink(source, book, nextChapter)
-                            ?: return@withLock
-                        if (refreshedLink.playUrl == cachedLink.playUrl ||
-                            !isPlayLinkReachable(refreshedLink)
-                        ) {
+                            chapterLinkCache[nextKey] = playableLink
+                            preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
+                            withContext(Main) {
+                                queueNextEpisode(nextKey, playableLink)
+                            }
                             return@withLock
                         }
-                        refreshedLink
+                    val cachedLink = resolveChapterLink(source, book, nextChapter)
+                        ?: return@withLock
+                    val playableLink = preparePlayableLink(cachedLink, nextKey) {
+                        resolveChapterLink(source, book, nextChapter)
                     }
                     chapterLinkCache[nextKey] = playableLink
                     preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
@@ -461,12 +397,87 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
     }
 
-    private suspend fun resolvePreloadLink(
+    private suspend fun preparePlayableLink(
+        candidate: CachedPlayLink,
+        cacheKey: String? = null,
+        refreshLink: (suspend () -> CachedPlayLink?)? = null
+    ): CachedPlayLink {
+        if (isPlayLinkReachable(candidate)) {
+            return candidate
+        }
+        cacheKey?.let(::clearChapterPlayLink)
+        return refreshLink?.invoke() ?: candidate
+    }
+
+    private fun resolvePlayLink(
+        mediaUrl: String,
+        source: BaseSource?,
+        ruleData: RuleDataInterface?,
+        chapter: BookChapter? = null
+    ): CachedPlayLink {
+        val analyzeUrl = AnalyzeUrl(
+            mediaUrl,
+            source = source,
+            ruleData = ruleData,
+            chapter = chapter
+        )
+        return CachedPlayLink(
+            playUrl = analyzeUrl.url,
+            headers = analyzeUrl.headerMap.toMap(),
+            mediaUrl = mediaUrl,
+            createdAt = System.currentTimeMillis()
+        )
+    }
+
+    private suspend fun resolveChapterPlayableLink(
+        source: BookSource,
+        book: Book,
+        chapter: BookChapter
+    ): CachedPlayLink {
+        val chapterCacheKey = buildChapterCacheKey(source, book, chapter)
+        chapter.resourceUrl
+            ?.takeIf { ExoPlayerHelper.isVideoCached(it, book) }
+            ?.let { resourceUrl ->
+                val resourceLink = CachedPlayLink(
+                    playUrl = resourceUrl,
+                    headers = emptyMap(),
+                    mediaUrl = resourceUrl,
+                    createdAt = System.currentTimeMillis()
+                )
+                return preparePlayableLink(resourceLink, chapterCacheKey) {
+                    resolveChapterLink(source, book, chapter)
+                }
+            }
+        chapterLinkCache[chapterCacheKey]?.takeIf {
+            System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
+        }?.let { cached ->
+            return preparePlayableLink(cached, chapterCacheKey) {
+                resolveChapterLink(source, book, chapter)
+            }
+        }
+        val resolvedLink = resolveChapterLink(source, book, chapter)
+            ?: throw ContentEmptyException("正文为空")
+        return preparePlayableLink(resolvedLink, chapterCacheKey) {
+            resolveChapterLink(source, book, chapter)
+        }
+    }
+
+    private suspend fun resolveChapterLink(
         source: BookSource,
         book: Book,
         chapter: BookChapter
     ): CachedPlayLink? {
         val content = WebBook.getContentAwait(source, book, chapter).trim()
+        return resolveChapterLink(source, book, chapter, content)
+    }
+
+    private fun resolveChapterLink(
+        source: BookSource,
+        book: Book,
+        chapter: BookChapter,
+        content: String
+    ): CachedPlayLink? {
+        val content = content.trim()
         if (content.isEmpty()) return null
         val mUrl = if (content.startsWith("<")) {
             val name = MD5Utils.md5Encode(content) + ".mpd"
@@ -476,22 +487,17 @@ object VideoPlay : CoroutineScope by MainScope(){
         } else {
             content
         }
-        val analyzeUrl = AnalyzeUrl(
-            mUrl,
-            source = source,
-            ruleData = book,
-            chapter = chapter
-        )
-        return CachedPlayLink(
-            playUrl = analyzeUrl.url,
-            headers = analyzeUrl.headerMap.toMap(),
-            mediaUrl = mUrl,
-            createdAt = System.currentTimeMillis()
-        )
+        return resolvePlayLink(mUrl, source, book, chapter)
     }
 
     private fun isPlayLinkReachable(link: CachedPlayLink): Boolean {
-        val playUrl = link.playUrl
+        return isPlayLinkReachable(link.playUrl, link.headers)
+    }
+
+    private fun isPlayLinkReachable(
+        playUrl: String,
+        headers: Map<String, String>
+    ): Boolean {
         if (!playUrl.startsWith("http://", true) &&
             !playUrl.startsWith("https://", true)
         ) {
@@ -503,7 +509,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         return try {
             val headRequest = Request.Builder().apply {
                 url(playUrl)
-                addHeaders(link.headers)
+                addHeaders(headers)
                 head()
             }.build()
             client.newCall(headRequest).execute().use { response ->
@@ -516,7 +522,7 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
             val rangeRequest = Request.Builder().apply {
                 url(playUrl)
-                addHeaders(link.headers)
+                addHeaders(headers)
                 addHeader("Range", "bytes=0-0")
             }.build()
             client.newCall(rangeRequest).execute().use { response ->

@@ -120,10 +120,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     companion object {
         const val EXTRA_PREPARE_BOOK_INFO = "prepareBookInfo"
         private const val COLLAPSED_PANEL_HEIGHT_DP = 50
-        private const val START_FAILURE_THRESHOLD_MS = 3_000L
-        private const val AUTO_RETRY_DELAY_MS = 800L
-        private const val MAX_AUTO_RELOAD_RETRY = 2
-        private const val MAX_AUTO_REFRESH_RETRY = 2
         private var suppressStartFullAfterThemeSwitch = false
         private var restoreBottomPanelExpandedAfterThemeSwitch: Boolean? = null
         private var restorePlayingAfterThemeSwitch = true
@@ -178,9 +174,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var detailTabIndex = 0
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var menuCustomBtn: MenuItem? = null
-    private var autoReloadRetryCount = 0
-    private var autoRefreshRetryCount = 0
-    private var handlingVideoPlayError = false
     private val bookSourceEditResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
@@ -907,13 +900,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         playerView.updateTitle(VideoPlay.displayTitle())
         playerView.fullscreenButton.setOnClickListener { toggleFullScreen() }
         playerView.setBackFromFullScreenListener { toggleFullScreen() }
+        playerView.onPlaybackLoadTimeout = {
+            handleVideoPlayError()
+        }
         playerView.setVideoAllCallBack(object : GSYSampleCallBack() {
             @SuppressLint("SourceLockedOrientationActivity")
             override fun onPrepared(url: String?, vararg objects: Any?) {
                 super.onPrepared(url, *objects)
-                autoReloadRetryCount = 0
-                autoRefreshRetryCount = 0
-                handlingVideoPlayError = false
                 setVideoKeepScreenOn(true)
                 playerView.post {
                     val player = playerView.getCurrentPlayer()
@@ -975,49 +968,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     private fun handleVideoPlayError() {
-        if (handlingVideoPlayError || isFinishing || isDestroyed) {
+        if (isFinishing || isDestroyed) {
             return
         }
         val player = playerView.getCurrentPlayer()
-        val currentPosition = maxOf(
-            player.getCurrentPositionWhenPlaying(),
-            VideoPlay.durChapterPos.toLong()
-        )
-        val isMidPlaybackFailure = currentPosition >= START_FAILURE_THRESHOLD_MS
-        val canRefreshChapter = !VideoPlay.singleUrl &&
-                VideoPlay.source is BookSource &&
-                VideoPlay.book != null &&
-                VideoPlay.chapter != null
         val preloadedMediaKey = VideoPlay.videoManager.currentMediaKey()
         if (preloadedMediaKey != null) {
             VideoPlay.clearChapterPlayLink(preloadedMediaKey)
         }
-        when {
-            !isMidPlaybackFailure &&
-                    canRefreshChapter &&
-                    autoRefreshRetryCount < MAX_AUTO_REFRESH_RETRY -> {
-                autoRefreshRetryCount++
-                retryVideoPlay {
-                    VideoPlay.refreshCurrentChapter(playerView)
-                }
-            }
-            autoReloadRetryCount < MAX_AUTO_RELOAD_RETRY -> {
-                autoReloadRetryCount++
-                retryVideoPlay {
-                    VideoPlay.startPlay(playerView)
-                }
-            }
-        }
-    }
-
-    private fun retryVideoPlay(action: () -> Unit) {
-        handlingVideoPlayError = true
-        playerView.postDelayed({
-            handlingVideoPlayError = false
-            if (!isFinishing && !isDestroyed) {
-                action()
-            }
-        }, AUTO_RETRY_DELAY_MS)
+        player.showPlayAddressError()
+        setVideoKeepScreenOn(false)
     }
 
     private fun setVideoKeepScreenOn(enable: Boolean) {
