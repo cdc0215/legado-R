@@ -87,6 +87,11 @@ class ExoVideoManager: GSYVideoBaseManager() {
     }
 
     @OptIn(UnstableApi::class)
+    fun currentMediaKey(): String? {
+        return (playerManager as? ExoPlayerManager)?.currentMediaKey()
+    }
+
+    @OptIn(UnstableApi::class)
     fun setOnMediaKeyTransitionListener(listener: ((String) -> Unit)?) {
         onMediaKeyTransition = listener
         (playerManager as? ExoPlayerManager)?.setOnMediaKeyTransitionListener(listener)

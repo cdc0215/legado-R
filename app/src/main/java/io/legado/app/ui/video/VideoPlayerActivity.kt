@@ -44,6 +44,7 @@ import io.legado.app.help.GlideImageGetter
 import io.legado.app.help.TextViewTagHandler
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.addType
+import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
@@ -483,6 +484,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 book.save()
                 appDb.bookChapterDao.delByBook(book.bookUrl)
                 appDb.bookChapterDao.insert(*chapters.toTypedArray())
+                CacheManifestHelper.refreshAsync(book, chapters)
             }
             SourceCallBack.callBackBook(
                 SourceCallBack.START_READ,
@@ -706,7 +708,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             chapters = toc,
             selectedPosition = VideoPlay.chapterInVolumeIndex,
             isVolume = false,
-            isCached = { chapter -> ExoPlayerHelper.isMediaCached(chapter.resourceUrl) }
+            isCached = { chapter -> ExoPlayerHelper.isVideoCached(chapter.resourceUrl, VideoPlay.book) }
         ) { chapter, index ->
             if (index != VideoPlay.chapterInVolumeIndex) {
                 VideoPlay.chapterInVolumeIndex = index
@@ -986,6 +988,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 VideoPlay.source is BookSource &&
                 VideoPlay.book != null &&
                 VideoPlay.chapter != null
+        val preloadedMediaKey = VideoPlay.videoManager.currentMediaKey()
+        if (preloadedMediaKey != null) {
+            VideoPlay.clearChapterPlayLink(preloadedMediaKey)
+        }
         when {
             !isMidPlaybackFailure &&
                     canRefreshChapter &&

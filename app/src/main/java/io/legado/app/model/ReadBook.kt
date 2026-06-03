@@ -15,6 +15,7 @@ import io.legado.app.data.entities.ReadRecord
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.ReadRecordDailyHelper
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isEpub
 import io.legado.app.help.book.isImage
@@ -1012,6 +1013,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 }
                 appDb.bookChapterDao.delByBook(oldBook.bookUrl)
                 appDb.bookChapterDao.insert(*cList.toTypedArray())
+                CacheManifestHelper.refreshAsync(book, cList)
                 onChapterListUpdated(book, false)
                 nextTextChapter ?: loadContent(durChapterIndex + 1)
             }

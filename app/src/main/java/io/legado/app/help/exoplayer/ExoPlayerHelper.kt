@@ -27,7 +27,10 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
+import io.legado.app.data.entities.Book
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.externalCache
@@ -36,6 +39,7 @@ import io.legado.app.utils.isJsonArray
 import okhttp3.CacheControl
 import splitties.init.appCtx
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 
@@ -78,7 +82,7 @@ object ExoPlayerHelper {
 
 
     private val resolvingDataSource: ResolvingDataSource.Factory by lazy {
-        ResolvingDataSource.Factory(audioReadDataSourceFactory) {
+        ResolvingDataSource.Factory(audioReadDataSourceFactory()) {
             var res = it
 
             if (it.uri.toString().contains(SPLIT_TAG)) {
@@ -104,12 +108,12 @@ object ExoPlayerHelper {
     val cacheDataSourceFactory by lazy {
         //使用自定义的CacheDataSource以支持设置UA
         CacheDataSource.Factory()
-            .setCache(cache)
+            .setCache(videoCache())
             .setUpstreamDataSourceFactory(okhttpDataFactory)
             .setCacheReadDataSourceFactory(FileDataSource.Factory())
             .setCacheWriteDataSinkFactory(
                 CacheDataSink.Factory()
-                    .setCache(cache)
+                    .setCache(videoCache())
                     .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
             )
     }
@@ -117,9 +121,10 @@ object ExoPlayerHelper {
     fun createOfflineMediaSource(
         context: Context,
         url: String,
-        headers: Map<String, String>
+        headers: Map<String, String>,
+        book: Book? = null
     ): MediaSource {
-        return DefaultMediaSourceFactory(offlineMediaDataSourceFactory(headers))
+        return DefaultMediaSourceFactory(offlineMediaDataSourceFactory(headers, book))
             .setLiveTargetOffsetMs(5000)
             .createMediaSource(
                 MediaItem.Builder()
@@ -129,27 +134,20 @@ object ExoPlayerHelper {
             )
     }
 
-    private val audioCacheDataSourceFactory by lazy {
-        CacheDataSource.Factory()
-            .setCache(audioCache)
-            .setUpstreamDataSourceFactory(okhttpDataFactory)
-            .setCacheReadDataSourceFactory(FileDataSource.Factory())
-            .setCacheWriteDataSinkFactory(
-                CacheDataSink.Factory()
-                    .setCache(audioCache)
-                    .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
-            )
-    }
-
-    private val audioReadDataSourceFactory by lazy {
-        CacheDataSource.Factory()
+    private fun audioReadDataSourceFactory(book: Book? = null): CacheDataSource.Factory {
+        val audioCache = audioCache(book)
+        return CacheDataSource.Factory()
             .setCache(audioCache)
             .setUpstreamDataSourceFactory(okhttpDataFactory)
             .setCacheReadDataSourceFactory(FileDataSource.Factory())
             .setCacheWriteDataSinkFactory(null)
     }
 
-    private fun offlineMediaDataSourceFactory(headers: Map<String, String>): CacheDataSource.Factory {
+    private fun offlineMediaDataSourceFactory(
+        headers: Map<String, String>,
+        book: Book? = null
+    ): CacheDataSource.Factory {
+        val audioCache = audioCache(book)
         return CacheDataSource.Factory()
             .setCache(audioCache)
             .setUpstreamDataSourceFactory(okhttpDataFactory(headers))
@@ -161,14 +159,41 @@ object ExoPlayerHelper {
             )
     }
 
-    private fun videoPreloadDataSourceFactory(headers: Map<String, String>): CacheDataSource.Factory {
+    fun createVideoMediaSource(
+        context: Context,
+        url: String,
+        headers: Map<String, String>,
+        cacheDir: File? = null
+    ): MediaSource {
+        return DefaultMediaSourceFactory(videoMediaDataSourceFactory(headers, cacheDir))
+            .setLiveTargetOffsetMs(5000)
+            .createMediaSource(
+                MediaItem.Builder()
+                    .setUri(url)
+                    .setMimeType(guessMediaMimeType(url))
+                    .build()
+            )
+    }
+
+    private fun videoPreloadDataSourceFactory(
+        headers: Map<String, String>,
+        cacheDir: File? = null
+    ): CacheDataSource.Factory {
+        return videoMediaDataSourceFactory(headers, cacheDir)
+    }
+
+    private fun videoMediaDataSourceFactory(
+        headers: Map<String, String>,
+        cacheDir: File? = null
+    ): CacheDataSource.Factory {
+        val videoCache = videoCache(cacheDir)
         return CacheDataSource.Factory()
-            .setCache(cache)
+            .setCache(videoCache)
             .setUpstreamDataSourceFactory(okhttpDataFactory(headers))
             .setCacheReadDataSourceFactory(FileDataSource.Factory())
             .setCacheWriteDataSinkFactory(
                 CacheDataSink.Factory()
-                    .setCache(cache)
+                    .setCache(videoCache)
                     .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
             )
     }
@@ -193,33 +218,63 @@ object ExoPlayerHelper {
             .setDefaultRequestProperties(headers)
     }
 
-    /**
-     * Exoplayer 内置的缓存
-     */
-    private val cache: Cache by lazy {
-        val databaseProvider = StandaloneDatabaseProvider(appCtx)
-        return@lazy SimpleCache(
-            //Exoplayer的缓存路径
-            File(appCtx.externalCache, "exoplayer"),
-            // 视频播放预加载缓存
-            LeastRecentlyUsedCacheEvictor(VIDEO_PLAY_CACHE_MAX_BYTES),
-            //记录缓存的数据库
-            databaseProvider
-        )
+    private val databaseProvider: StandaloneDatabaseProvider by lazy {
+        StandaloneDatabaseProvider(appCtx)
+    }
+    private val cacheMap = ConcurrentHashMap<String, Cache>()
+    private val cacheLock = Any()
+
+    private fun simpleCache(dir: File, maxBytes: Long): Cache {
+        val path = dir.absolutePath
+        cacheMap[path]?.let { return it }
+        return synchronized(cacheLock) {
+            cacheMap[path] ?: SimpleCache(
+                dir.apply { mkdirs() },
+                LeastRecentlyUsedCacheEvictor(maxBytes),
+                databaseProvider
+            ).also { cacheMap[path] = it }
+        }
     }
 
-    private val audioCache: Cache by lazy {
-        val databaseProvider = StandaloneDatabaseProvider(appCtx)
-        return@lazy SimpleCache(
-            File(appCtx.externalCache, "audio_exoplayer"),
-            LeastRecentlyUsedCacheEvictor(AUDIO_OFFLINE_CACHE_MAX_BYTES),
-            databaseProvider
-        )
+    fun audioBookCacheDir(book: Book): File {
+        return File(BookHelp.getCacheDir(book), AUDIO_BOOK_CACHE_DIR)
     }
 
-    private val audioCompleteMarkerDir: File by lazy {
-        File(appCtx.externalCache, "audio_exoplayer_complete").apply { mkdirs() }
+    fun videoBookCacheDir(book: Book): File {
+        return File(BookHelp.getCacheDir(book), VIDEO_BOOK_CACHE_DIR)
     }
+
+    fun releaseBookCaches(book: Book) {
+        releaseCache(audioBookCacheDir(book))
+        releaseCache(videoBookCacheDir(book))
+    }
+
+    private fun releaseCache(dir: File) {
+        val path = dir.absolutePath
+        synchronized(cacheLock) {
+            cacheMap.remove(path)?.release()
+        }
+    }
+
+    private fun audioCache(book: Book? = null): Cache {
+        return simpleCache(book?.let(::audioBookCacheDir) ?: legacyAudioCacheDir, AUDIO_OFFLINE_CACHE_MAX_BYTES)
+    }
+
+    private fun videoCache(cacheDir: File? = null): Cache {
+        return simpleCache(cacheDir ?: legacyVideoCacheDir, VIDEO_CACHE_MAX_BYTES)
+    }
+
+    private val legacyAudioCacheDir: File
+        get() = File(appCtx.externalCache, "audio_exoplayer")
+
+    private val legacyVideoCacheDir: File
+        get() = File(appCtx.externalCache, "exoplayer")
+
+    private val legacyAudioCompleteMarkerDir: File
+        get() = File(appCtx.externalCache, "audio_exoplayer_complete")
+
+    private val legacyVideoCompleteMarkerDir: File
+        get() = File(appCtx.externalCache, "exoplayer_complete")
 
     /**
      * 通过kotlin扩展函数+反射实现CacheDataSource.Factory设置默认请求头
@@ -238,13 +293,13 @@ object ExoPlayerHelper {
 //    }
 
 
-    fun getMediaSource(context: Context, url: String): MediaSource? {
+    fun getMediaSource(context: Context, url: String, book: Book? = null): MediaSource? {
         val uris = GSON.fromJsonArray<String>(url).getOrNull() ?: return null
         if (uris.isEmpty()) return null
         val mediaSourceBuilder = ConcatenatingMediaSource2.Builder()
         for (uri in uris) {
             mediaSourceBuilder.add(
-                ProgressiveMediaSource.Factory(audioReadDataSourceFactory)
+                ProgressiveMediaSource.Factory(audioReadDataSourceFactory(book))
                     .createMediaSource(MediaItem.fromUri(uri)), 3000
             )
         }
@@ -253,6 +308,8 @@ object ExoPlayerHelper {
 
     fun cacheMedia(
         request: MediaRequest,
+        useVideoCache: Boolean = false,
+        book: Book? = null,
         progress: ((requestLength: Long, bytesCached: Long, newBytesCached: Long) -> Unit)? = null,
         shouldCancel: (() -> Boolean)? = null
     ): Long {
@@ -265,8 +322,13 @@ object ExoPlayerHelper {
                 throw kotlinx.coroutines.CancellationException("audio cache cancelled")
             }
             var cached = 0L
+            val dataSourceFactory = if (useVideoCache) {
+                videoMediaDataSourceFactory(request.headers, book?.let(::videoBookCacheDir))
+            } else {
+                offlineMediaDataSourceFactory(request.headers, book)
+            }
             val downloader = DefaultDownloaderFactory(
-                offlineMediaDataSourceFactory(request.headers),
+                dataSourceFactory,
                 Runnable::run
             ).createDownloader(
                 DownloadRequest.Builder(MD5Utils.md5Encode(url), Uri.parse(url))
@@ -282,7 +344,7 @@ object ExoPlayerHelper {
                 cached = bytesCached
                 progress?.invoke(requestLength, bytesCached, newBytesCached)
             }
-            markMediaUrlComplete(url)
+            markMediaUrlComplete(url, useVideoCache, book)
             totalCached += cached
         }
         return totalCached
@@ -290,6 +352,7 @@ object ExoPlayerHelper {
 
     fun preloadVideoWindow(
         request: MediaRequest,
+        cacheDir: File? = null,
         durationMs: Long = VIDEO_PRELOAD_DURATION_MS,
         shouldCancel: (() -> Boolean)? = null
     ): Long {
@@ -299,7 +362,7 @@ object ExoPlayerHelper {
             throw kotlinx.coroutines.CancellationException("video preload cancelled")
         }
         val preloadBytes = estimatePreloadBytes(durationMs)
-        val dataSource = videoPreloadDataSourceFactory(request.headers).createDataSource()
+        val dataSource = videoPreloadDataSourceFactory(request.headers, cacheDir).createDataSource()
         val writer = CacheWriter(
             dataSource,
             DataSpec.Builder()
@@ -323,7 +386,7 @@ object ExoPlayerHelper {
         if (cancelled) {
             throw kotlinx.coroutines.CancellationException("video preload cancelled")
         }
-        return cache.getCachedBytes(url, 0, preloadBytes)
+        return videoCache(cacheDir).getCachedBytes(url, 0, preloadBytes)
     }
 
     private fun estimatePreloadBytes(durationMs: Long): Long {
@@ -331,33 +394,67 @@ object ExoPlayerHelper {
         return seconds * VIDEO_PRELOAD_BYTES_PER_SECOND
     }
 
-    fun isMediaCached(url: String?): Boolean {
+    fun isMediaCached(url: String?, book: Book? = null): Boolean {
         if (url.isNullOrBlank()) return false
         val urls = getMediaUrls(url)
         if (urls.isEmpty()) return false
         if (urls.any { !isDownloadableMediaUrl(it) }) return false
-        return urls.all { isMediaUrlCached(it) }
+        return urls.all { isMediaUrlCached(it, book) }
     }
 
-    fun removeMediaCache(url: String?) {
+    fun isVideoCached(url: String?, book: Book? = null): Boolean {
+        return isVideoCachedInCacheDir(url, book?.let(::videoBookCacheDir))
+    }
+
+    private fun isVideoCachedInCacheDir(url: String?, cacheDir: File? = null): Boolean {
+        if (url.isNullOrBlank()) return false
+        val urls = getMediaUrls(url)
+        if (urls.isEmpty()) return false
+        if (urls.any { !isDownloadableMediaUrl(it) }) return false
+        return urls.all { isVideoUrlCached(it, cacheDir) }
+    }
+
+    fun removeMediaCache(url: String?, book: Book? = null) {
         if (url.isNullOrBlank()) return
+        val audioCache = audioCache(book)
         getMediaUrls(url).forEach {
             audioCache.removeResource(it)
-            mediaCompleteMarker(it).delete()
+            mediaCompleteMarker(it, book = book).delete()
+        }
+    }
+
+    fun removeVideoCache(url: String?, book: Book? = null) {
+        removeVideoCacheInCacheDir(url, book?.let(::videoBookCacheDir))
+    }
+
+    private fun removeVideoCacheInCacheDir(url: String?, cacheDir: File? = null) {
+        if (url.isNullOrBlank()) return
+        val videoCache = videoCache(cacheDir)
+        getMediaUrls(url).forEach {
+            videoCache.removeResource(it)
+            mediaCompleteMarker(it, useVideoCache = true, cacheDir = cacheDir).delete()
         }
     }
 
     fun clearAudioCache() {
+        val audioCache = audioCache()
         audioCache.keys.toList().forEach { audioCache.removeResource(it) }
-        audioCompleteMarkerDir.listFiles()?.forEach { it.delete() }
+        releaseCache(legacyAudioCacheDir)
+        FileUtils.delete(legacyAudioCacheDir, deleteRootDir = true)
+        FileUtils.delete(legacyAudioCompleteMarkerDir, deleteRootDir = true)
     }
 
     fun clearVideoCache() {
-        cache.keys.toList().forEach { cache.removeResource(it) }
+        val videoCache = videoCache()
+        videoCache.keys.toList().forEach { videoCache.removeResource(it) }
+        releaseCache(legacyVideoCacheDir)
+        FileUtils.delete(legacyVideoCacheDir, deleteRootDir = true)
+        FileUtils.delete(legacyVideoCompleteMarkerDir, deleteRootDir = true)
     }
 
-    fun getMediaCacheSize(url: String?): Long {
+    fun getMediaCacheSize(url: String?, book: Book? = null): Long {
         if (url.isNullOrBlank()) return 0L
+        val audioCache = audioCache(book)
         return getMediaUrls(url).sumOf { mediaUrl ->
             audioCache.getCachedSpans(mediaUrl)
                 .asSequence()
@@ -366,12 +463,35 @@ object ExoPlayerHelper {
         }
     }
 
-    fun copyMediaCache(url: String?, targetDir: File): Int {
+    fun getVideoCacheSize(url: String?, book: Book? = null): Long {
+        return getVideoCacheSizeInCacheDir(url, book?.let(::videoBookCacheDir))
+    }
+
+    private fun getVideoCacheSizeInCacheDir(url: String?, cacheDir: File? = null): Long {
+        if (url.isNullOrBlank()) return 0L
+        val videoCache = videoCache(cacheDir)
+        return getMediaUrls(url).sumOf { mediaUrl ->
+            videoCache.getCachedSpans(mediaUrl)
+                .asSequence()
+                .filter { it.isCached }
+                .sumOf { it.length.coerceAtLeast(0L) }
+        }
+    }
+
+    fun copyMediaCache(url: String?, targetDir: File, book: Book? = null): Int {
+        return copyCache(audioCache(book), url, targetDir)
+    }
+
+    fun copyVideoCache(url: String?, targetDir: File, book: Book? = null): Int {
+        return copyCache(videoCache(book?.let(::videoBookCacheDir)), url, targetDir)
+    }
+
+    private fun copyCache(cache: Cache, url: String?, targetDir: File): Int {
         if (url.isNullOrBlank()) return 0
         if (!targetDir.exists()) targetDir.mkdirs()
         var count = 0
         getMediaUrls(url).forEachIndexed { urlIndex, mediaUrl ->
-            for (span in audioCache.getCachedSpans(mediaUrl)) {
+            for (span in cache.getCachedSpans(mediaUrl)) {
                 if (!span.isCached) continue
                 val source = span.file ?: continue
                 if (!source.exists() || !source.isFile) continue
@@ -383,33 +503,80 @@ object ExoPlayerHelper {
         return count
     }
 
-    private fun isMediaUrlCached(url: String): Boolean {
+    private fun isMediaUrlCached(url: String, book: Book? = null): Boolean {
+        val audioCache = audioCache(book)
         if (isAdaptiveMediaUrl(url)) {
-            return hasMediaCompleteMarker(url)
+            return hasMediaCompleteMarker(url, book = book)
         }
         val contentLength = ContentMetadata.getContentLength(audioCache.getContentMetadata(url))
         return if (contentLength > 0) {
             audioCache.isCached(url, 0, contentLength)
         } else {
-            hasMediaCompleteMarker(url) &&
+            hasMediaCompleteMarker(url, book = book) &&
                 audioCache.getCachedBytes(url, 0, Long.MAX_VALUE) > 0
         }
     }
 
-    private fun markMediaUrlComplete(url: String) {
-        runCatching {
-            mediaCompleteMarker(url).writeText(COMPLETE_MARKER_VERSION)
+    private fun isVideoUrlCached(url: String, cacheDir: File? = null): Boolean {
+        val videoCache = videoCache(cacheDir)
+        if (isAdaptiveMediaUrl(url)) {
+            return hasMediaCompleteMarker(url, useVideoCache = true, cacheDir = cacheDir)
+        }
+        val contentLength = ContentMetadata.getContentLength(videoCache.getContentMetadata(url))
+        return if (contentLength > 0) {
+            videoCache.isCached(url, 0, contentLength)
+        } else {
+            hasMediaCompleteMarker(url, useVideoCache = true, cacheDir = cacheDir) &&
+                videoCache.getCachedBytes(url, 0, Long.MAX_VALUE) > 0
         }
     }
 
-    private fun hasMediaCompleteMarker(url: String): Boolean {
+    private fun markMediaUrlComplete(
+        url: String,
+        useVideoCache: Boolean = false,
+        book: Book? = null
+    ) {
+        runCatching {
+            mediaCompleteMarker(url, useVideoCache, book = book).writeText(COMPLETE_MARKER_VERSION)
+        }
+    }
+
+    private fun hasMediaCompleteMarker(
+        url: String,
+        useVideoCache: Boolean = false,
+        book: Book? = null,
+        cacheDir: File? = null
+    ): Boolean {
         return runCatching {
-            mediaCompleteMarker(url).readText() == COMPLETE_MARKER_VERSION
+            mediaCompleteMarker(url, useVideoCache, book, cacheDir).readText() == COMPLETE_MARKER_VERSION
         }.getOrDefault(false)
     }
 
-    private fun mediaCompleteMarker(url: String): File {
-        return File(audioCompleteMarkerDir, MD5Utils.md5Encode(url))
+    private fun mediaCompleteMarker(
+        url: String,
+        useVideoCache: Boolean = false,
+        book: Book? = null,
+        cacheDir: File? = null
+    ): File {
+        return File(
+            mediaCompleteMarkerDir(useVideoCache, book, cacheDir),
+            MD5Utils.md5Encode(url)
+        )
+    }
+
+    private fun mediaCompleteMarkerDir(
+        useVideoCache: Boolean,
+        book: Book? = null,
+        cacheDir: File? = null
+    ): File {
+        val dir = when {
+            useVideoCache && cacheDir != null -> File(cacheDir.parentFile, VIDEO_BOOK_COMPLETE_DIR)
+            useVideoCache && book != null -> File(BookHelp.getCacheDir(book), VIDEO_BOOK_COMPLETE_DIR)
+            useVideoCache -> legacyVideoCompleteMarkerDir
+            book != null -> File(BookHelp.getCacheDir(book), AUDIO_BOOK_COMPLETE_DIR)
+            else -> legacyAudioCompleteMarkerDir
+        }
+        return dir.apply { mkdirs() }
     }
 
     private fun getMediaUrls(url: String): List<String> {
@@ -449,7 +616,11 @@ object ExoPlayerHelper {
     )
 
     private const val AUDIO_OFFLINE_CACHE_MAX_BYTES = 4L * 1024 * 1024 * 1024
-    private const val VIDEO_PLAY_CACHE_MAX_BYTES = 512L * 1024 * 1024
+    private const val VIDEO_CACHE_MAX_BYTES = 4L * 1024 * 1024 * 1024
+    private const val AUDIO_BOOK_CACHE_DIR = "audio_media"
+    private const val VIDEO_BOOK_CACHE_DIR = "video_media"
+    private const val AUDIO_BOOK_COMPLETE_DIR = "audio_media_complete"
+    private const val VIDEO_BOOK_COMPLETE_DIR = "video_media_complete"
     private const val VIDEO_PRELOAD_DURATION_MS = 5L * 60 * 1000
     private const val VIDEO_PRELOAD_BYTES_PER_SECOND = 256L * 1024
     private const val COMPLETE_MARKER_VERSION = "media_downloader_v2"

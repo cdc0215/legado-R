@@ -16,7 +16,6 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.DefaultData
 import io.legado.app.help.book.BookHelp
-import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isUpError
@@ -295,9 +294,6 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
 
     private fun deleteNotShelfBook() {
         execute {
-            appDb.bookDao.notShelfBooks.forEach {
-                CacheManifestHelper.refresh(it)
-            }
             appDb.bookDao.deleteNotShelfBook()
         }
     }

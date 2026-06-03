@@ -7,6 +7,7 @@ import io.legado.app.constant.NotificationId
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.exoplayer.ExoPlayerHelper
+import io.legado.app.help.book.isVideo
 import io.legado.app.utils.ConvertUtils
 import io.legado.app.utils.activityPendingIntent
 import io.legado.app.utils.broadcastPendingIntent
@@ -146,6 +147,8 @@ object AudioCacheTaskManager {
                     var chapterKnownLength = 0L
                     ExoPlayerHelper.cacheMedia(
                         request = mediaRequest,
+                        useVideoCache = book.isVideo,
+                        book = book,
                         progress = progress@{ requestLength, bytesCached, newBytesCached ->
                             if (cancelFlag.get()) throw CancellationException("cancelled")
                             if (requestLength > 0 && bytesCached <= requestLength) {
@@ -253,7 +256,7 @@ object AudioCacheTaskManager {
                 val shouldResume = finalStatus == CacheTaskStatus.PAUSED &&
                     pendingResumeBookUrls.remove(book.bookUrl)
                 val remainingChapters = if (shouldResume) {
-                    request.chapters.filterNot { ExoPlayerHelper.isMediaCached(it.resourceUrl) }
+                    request.chapters.filterNot { isChapterCached(book, it) }
                 } else {
                     emptyList()
                 }
@@ -325,7 +328,7 @@ object AudioCacheTaskManager {
                     return@execute
                 }
                 val remainingChapters = request.chapters
-                    .filterNot { ExoPlayerHelper.isMediaCached(it.resourceUrl) }
+                    .filterNot { isChapterCached(request.book, it) }
                 val completedOffset = (request.totalChapters - remainingChapters.size)
                     .coerceAtLeast(latestState.completedChapters)
                     .coerceIn(0, request.totalChapters)
@@ -368,6 +371,14 @@ object AudioCacheTaskManager {
             totalText,
             speedText
         )
+    }
+
+    private fun isChapterCached(book: Book, chapter: BookChapter): Boolean {
+        return if (book.isVideo) {
+            ExoPlayerHelper.isVideoCached(chapter.resourceUrl, book)
+        } else {
+            ExoPlayerHelper.isMediaCached(chapter.resourceUrl, book)
+        }
     }
 
     private fun updateState(bookUrl: String, transform: (AudioCacheTaskState) -> AudioCacheTaskState) {

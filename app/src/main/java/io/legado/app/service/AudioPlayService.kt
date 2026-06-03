@@ -39,7 +39,7 @@ import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.getMediaItem
+import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.getMediaRequest
 import io.legado.app.receiver.MediaButtonReceiver
 import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.utils.activityPendingIntent
@@ -236,7 +236,7 @@ class AudioPlayService : BaseService(),
             postEvent(EventBus.AUDIO_STATE, Status.STOP)
             upPlayProgressJob?.cancel()
             if (url.isJsonArray()) {
-                val mediaSource = ExoPlayerHelper.getMediaSource(this@AudioPlayService, url)
+                val mediaSource = ExoPlayerHelper.getMediaSource(this@AudioPlayService, url, book)
                 if (mediaSource ==  null) {
                     NoStackTraceException("url格式错误")
                     return@execute
@@ -251,7 +251,15 @@ class AudioPlayService : BaseService(),
                     chapter = AudioPlay.durChapter,
                     coroutineContext = coroutineContext
                 )
-                exoPlayer.setMediaItem(analyzeUrl.getMediaItem())
+                val mediaRequest = analyzeUrl.getMediaRequest()
+                exoPlayer.setMediaSource(
+                    ExoPlayerHelper.createOfflineMediaSource(
+                        this@AudioPlayService,
+                        mediaRequest.url,
+                        mediaRequest.headers,
+                        book
+                    )
+                )
             }
             exoPlayer.playWhenReady = true
             //获取片头设定

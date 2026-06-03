@@ -200,7 +200,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                     return
                 }
                 chapter.resourceUrl
-                    ?.takeIf { ExoPlayerHelper.isMediaCached(it) }
+                    ?.takeIf { ExoPlayerHelper.isMediaCached(it, book) }
                     ?.let { cachedUrl ->
                         durPlayUrl = cachedUrl
                         durLyric = chapter.getVariable("lyric")

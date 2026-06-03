@@ -199,6 +199,10 @@ class ExoPlayerManager : BasePlayerManager() {
         return mediaPlayer?.hasNext() == true
     }
 
+    fun currentMediaKey(): String? {
+        return mediaPlayer?.currentMediaKey()
+    }
+
     fun setOnMediaKeyTransitionListener(listener: ((String) -> Unit)?) {
         onMediaKeyTransition = listener
         mediaPlayer?.onMediaKeyTransition = listener

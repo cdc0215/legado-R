@@ -316,7 +316,12 @@ class CacheManageActivity :
     }
 
     private fun confirmDeleteStorage(name: String, target: CacheStorageDeleteTarget) {
-        alert(getString(R.string.delete), getString(R.string.cache_manage_delete_storage_confirm, name)) {
+        val message = if (target == CacheStorageDeleteTarget.WEBVIEW) {
+            getString(R.string.cache_manage_delete_webview_confirm, name)
+        } else {
+            getString(R.string.cache_manage_delete_storage_confirm, name)
+        }
+        alert(getString(R.string.delete), message) {
             yesButton {
                 viewModel.deleteStorageDetail(target) {
                     toastOnUi(R.string.delete_success)

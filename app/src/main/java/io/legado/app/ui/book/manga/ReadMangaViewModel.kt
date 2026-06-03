@@ -15,6 +15,7 @@ import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalModified
 import io.legado.app.help.book.removeType
@@ -131,6 +132,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             }
             appDb.bookChapterDao.delByBook(oldBook.bookUrl)
             appDb.bookChapterDao.insert(*cList.toTypedArray())
+            CacheManifestHelper.refreshAsync(book, cList)
             ReadManga.onChapterListUpdated(book)
             return true
         }.onFailure {
@@ -247,6 +249,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             ReadManga.book?.delete()
             appDb.bookDao.insert(book)
             appDb.bookChapterDao.insert(*toc.toTypedArray())
+            CacheManifestHelper.refreshAsync(book, toc)
             ReadManga.resetData(book)
             ReadManga.loadContent()
         }.onError {

@@ -1692,13 +1692,14 @@
     <string name="cache_manage_size_images">图片 %1$s</string>
     <string name="cache_manage_size_media">媒体 %1$s</string>
     <string name="cache_manage_size_manifest">目录清单 %1$s</string>
+    <string name="cache_manage_size_calculating">计算中...</string>
     <string name="cache_manage_storage_details">其它：%1$s</string>
     <string name="cache_manage_storage_books">书籍章节缓存</string>
     <string name="cache_manage_storage_text_books">文字书籍缓存</string>
     <string name="cache_manage_storage_audio_books">音频书籍缓存</string>
     <string name="cache_manage_storage_video_books">视频书籍缓存</string>
     <string name="cache_manage_storage_manga_books">漫画书籍缓存</string>
-    <string name="cache_manage_storage_other_books">其它书籍缓存</string>
+    <string name="cache_manage_storage_other_books">临时书籍缓存</string>
     <string name="cache_manage_storage_local_epub">本地 EPUB 副本</string>
     <string name="cache_manage_storage_databases">数据库(书源/RSS源/书架)</string>
     <string name="cache_manage_storage_preferences">偏好设置和 Datastore</string>
@@ -1725,9 +1726,9 @@
     <string name="cache_manage_storage_image_temp">图片临时文件</string>
     <string name="cache_manage_storage_so_download">原生库临时文件</string>
     <string name="cache_manage_storage_other_code">其它代码缓存</string>
-    <string name="cache_manage_storage_audio_offline">音频播放/离线缓存</string>
+    <string name="cache_manage_storage_audio_offline">临时音频缓存</string>
     <string name="cache_manage_storage_audio_markers">音频完成标记</string>
-    <string name="cache_manage_storage_video_preload">视频播放预加载</string>
+    <string name="cache_manage_storage_video_preload">临时视频缓存</string>
     <string name="cache_manage_storage_player_temp">播放器临时文件</string>
     <string name="cache_manage_storage_cache_package">缓存上传包</string>
     <string name="cache_manage_storage_video_temp">视频临时清单</string>
@@ -1752,6 +1753,7 @@
     <string name="cache_manage_delete_chapter_failed">删除失败：%1$s</string>
     <string name="cache_manage_delete_book_confirm">删除“%1$s”的全部缓存？</string>
     <string name="cache_manage_delete_storage_confirm">删除“%1$s”？需要时会重新生成或重新下载。</string>
+    <string name="cache_manage_delete_webview_confirm">删除“%1$s”？Cookie 已保存到应用数据库，但 WebView 站点数据可能需要重新生成。</string>
     <string name="cache_manage_upload">上传</string>
     <string name="cache_manage_uploading">正在打包上传...</string>
     <string name="cache_manage_upload_success">缓存包已上传到 WebDAV</string>

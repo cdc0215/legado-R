@@ -5,6 +5,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.exoplayer.ExoPlayerHelper
+import io.legado.app.help.globalExecutor
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import java.io.File
@@ -61,7 +62,7 @@ object CacheManifestHelper {
         val cachedByIndex = realChapters.associate { it.index to isChapterCached(it) }
         val cachedCount = cachedByIndex.values.count { it }
         val file = manifestFile(book)
-        if (cachedCount <= 0) {
+        if (cachedCount <= 0 && !book.isAudio && !book.isVideo) {
             file.delete()
             return null
         }
@@ -127,13 +128,27 @@ object CacheManifestHelper {
             write(book, chapters) { chapter ->
                 when {
                     book.isLocal -> false
-                    book.isAudio || book.isVideo -> ExoPlayerHelper.isMediaCached(chapter.resourceUrl)
+                    book.isVideo -> ExoPlayerHelper.isVideoCached(chapter.resourceUrl, book)
+                    book.isAudio -> ExoPlayerHelper.isMediaCached(chapter.resourceUrl, book)
                     else -> BookHelp.getChapterCacheFileNames(book, chapter).any(cacheNames::contains)
                 }
             }
         }.onFailure {
             AppLog.put("刷新缓存清单失败 ${book.name}\n${it.localizedMessage}", it)
         }.getOrNull()
+    }
+
+    fun refreshAsync(
+        book: Book,
+        chapters: List<BookChapter>? = null
+    ) {
+        globalExecutor.execute {
+            if (chapters == null) {
+                refresh(book)
+            } else {
+                refresh(book, chapters)
+            }
+        }
     }
 
     fun delete(book: Book) {

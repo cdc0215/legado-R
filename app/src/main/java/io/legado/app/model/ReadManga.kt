@@ -14,6 +14,7 @@ import io.legado.app.help.AppWebDav
 import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.ReadRecordDailyHelper
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isSameNameAuthor
@@ -492,6 +493,7 @@ object ReadManga : CoroutineScope by MainScope() {
                 }
                 appDb.bookChapterDao.delByBook(oldBook.bookUrl)
                 appDb.bookChapterDao.insert(*cList.toTypedArray())
+                CacheManifestHelper.refreshAsync(book, cList)
                 onChapterListUpdated(book, false)
                 nextMangaChapter ?: loadContent(durChapterIndex + 1)
             }

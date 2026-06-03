@@ -35,6 +35,7 @@ class CacheManageAdapter(
                     oldItem.totalChapterCount == newItem.totalChapterCount &&
                     oldItem.storageSizeBytes == newItem.storageSizeBytes &&
                     oldItem.storageSummary == newItem.storageSummary &&
+                    oldItem.storageCalculated == newItem.storageCalculated &&
                     oldItem.mode == newItem.mode &&
                     oldItem.taskState == newItem.taskState &&
                     oldItem.inBookshelf == newItem.inBookshelf &&
@@ -89,12 +90,7 @@ class CacheManageAdapter(
             item.totalChapterCount,
             item.formattedStorageSize()
         )
-        if (item.storageSummary.isBlank()) {
-            tvCacheDetail.gone()
-        } else {
-            tvCacheDetail.text = item.storageSummary
-            tvCacheDetail.visible()
-        }
+        tvCacheDetail.gone()
         btnBookshelf.setText(
             if (item.inBookshelf) R.string.cache_manage_use_cache
             else R.string.cache_manage_add_bookshelf
@@ -189,6 +185,9 @@ class CacheManageAdapter(
     }
 
     private fun CacheBookItem.formattedStorageSize(): String {
+        if (!storageCalculated) {
+            return context.getString(R.string.cache_manage_size_calculating)
+        }
         val bytes = storageSizeBytes
         val mb = bytes.toDouble() / 1024.0 / 1024.0
         return if (mb >= 0.01) {

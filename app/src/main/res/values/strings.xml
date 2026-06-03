@@ -1812,13 +1812,14 @@
     <string name="cache_manage_size_images">Images %1$s</string>
     <string name="cache_manage_size_media">Media %1$s</string>
     <string name="cache_manage_size_manifest">Manifest %1$s</string>
+    <string name="cache_manage_size_calculating">calculating...</string>
     <string name="cache_manage_storage_details">Other: %1$s</string>
     <string name="cache_manage_storage_books">Book chapter cache</string>
     <string name="cache_manage_storage_text_books">Text book cache</string>
     <string name="cache_manage_storage_audio_books">Audio book cache</string>
     <string name="cache_manage_storage_video_books">Video book cache</string>
     <string name="cache_manage_storage_manga_books">Manga book cache</string>
-    <string name="cache_manage_storage_other_books">Other book cache</string>
+    <string name="cache_manage_storage_other_books">Temporary book cache</string>
     <string name="cache_manage_storage_local_epub">Local EPUB copy</string>
     <string name="cache_manage_storage_databases">Databases (sources/RSS/bookshelf)</string>
     <string name="cache_manage_storage_preferences">Preferences and datastore</string>
@@ -1845,9 +1846,9 @@
     <string name="cache_manage_storage_image_temp">Image temp files</string>
     <string name="cache_manage_storage_so_download">Native library temp</string>
     <string name="cache_manage_storage_other_code">Other code cache</string>
-    <string name="cache_manage_storage_audio_offline">Audio playback/offline cache</string>
+    <string name="cache_manage_storage_audio_offline">Temporary audio cache</string>
     <string name="cache_manage_storage_audio_markers">Audio completion markers</string>
-    <string name="cache_manage_storage_video_preload">Video playback cache</string>
+    <string name="cache_manage_storage_video_preload">Temporary video cache</string>
     <string name="cache_manage_storage_player_temp">Player temp files</string>
     <string name="cache_manage_storage_cache_package">Cache packages</string>
     <string name="cache_manage_storage_video_temp">Video temp manifests</string>
@@ -1872,6 +1873,7 @@
     <string name="cache_manage_delete_chapter_failed">Delete failed: %1$s</string>
     <string name="cache_manage_delete_book_confirm">Delete all cache for “%1$s”?</string>
     <string name="cache_manage_delete_storage_confirm">Delete “%1$s”? It will be regenerated or downloaded again when needed.</string>
+    <string name="cache_manage_delete_webview_confirm">Delete “%1$s”? Stored cookies are saved in the app database, but WebView site storage may need to be recreated.</string>
     <string name="cache_manage_upload">Upload</string>
     <string name="cache_manage_uploading">Packing and uploading...</string>
     <string name="cache_manage_upload_success">Cache package uploaded to WebDAV</string>

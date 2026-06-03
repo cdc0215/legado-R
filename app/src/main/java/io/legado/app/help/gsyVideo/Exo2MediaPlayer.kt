@@ -22,6 +22,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import tv.danmaku.ijk.media.exo2.IjkExo2MediaPlayer
 import tv.danmaku.ijk.media.exo2.demo.EventLogger
+import java.io.File
 
 class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     companion object {
@@ -33,7 +34,13 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private val reportedMediaKeys = hashSetOf<String>()
     private var pendingNextMediaSource: MediaSource? = null
     private var pendingNextKey: String? = null
+    private var mediaCacheDir: File? = null
     var onMediaKeyTransition: ((String) -> Unit)? = null
+
+    override fun setCacheDir(cacheDir: File?) {
+        mediaCacheDir = cacheDir
+        super.setCacheDir(cacheDir)
+    }
 
     override fun setDataSource(context: Context?, uri: Uri?, headers: MutableMap<String, String>?) {
         if (headers != null) {
@@ -51,10 +58,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         reportedMediaKeys.clear()
         pendingNextMediaSource = null
         pendingNextKey = null
-        mMediaSource = ExoPlayerHelper.createOfflineMediaSource(
+        mMediaSource = ExoPlayerHelper.createVideoMediaSource(
             context ?: mAppContext,
             dataSource,
-            mHeaders
+            mHeaders,
+            mediaCacheDir
         )
     }
 
@@ -135,7 +143,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     fun appendNext(key: String, url: String, headers: Map<String, String>) {
         if (key.isBlank() || url.isBlank()) return
         if (mediaKeys.contains(key) || pendingNextKey == key) return
-        val mediaSource = ExoPlayerHelper.createOfflineMediaSource(mAppContext, url, headers)
+        val mediaSource = ExoPlayerHelper.createVideoMediaSource(mAppContext, url, headers, mediaCacheDir)
         val player = mInternalPlayer
         if (player == null) {
             pendingNextMediaSource = mediaSource
@@ -156,6 +164,10 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     fun hasNext(): Boolean {
         val player = mInternalPlayer ?: return pendingNextMediaSource != null
         return player.nextMediaItemIndex != C.INDEX_UNSET
+    }
+
+    fun currentMediaKey(): String? {
+        return mediaKeys.getOrNull(currentWindowIndex)
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {

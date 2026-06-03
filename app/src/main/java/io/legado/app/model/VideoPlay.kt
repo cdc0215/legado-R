@@ -44,6 +44,8 @@ import io.legado.app.help.gsyVideo.ExoVideoManager
 import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
 import io.legado.app.help.gsyVideo.FloatingPlayer
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.http.addHeaders
+import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
@@ -63,9 +65,11 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 import splitties.init.appCtx
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_NAME = "video_pos_" //单链接播放进度
@@ -282,7 +286,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         val chapterSource = source as BookSource
         val chapterCacheKey = buildChapterCacheKey(chapterSource, book, chapter)
         chapter.resourceUrl
-            ?.takeIf { ExoPlayerHelper.isMediaCached(it) }
+            ?.takeIf { ExoPlayerHelper.isVideoCached(it, book) }
             ?.let { cachedUrl ->
                 playResolvedChapter(player, chapterSource, book, chapter, cachedUrl, emptyMap())
                 isLoading = false
@@ -333,8 +337,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                 )
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
-                    player.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), displayTitle(book, chapter))
-                    preloadVideoWindow(chapterCacheKey, playUrl, analyzeUrl.headerMap)
+                    player.setUp(playUrl, false, ExoPlayerHelper.videoBookCacheDir(book), displayTitle(book, chapter))
+                    preloadVideoWindow(chapterCacheKey, playUrl, analyzeUrl.headerMap, ExoPlayerHelper.videoBookCacheDir(book))
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
@@ -361,8 +365,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             is File -> danmakuFile = danmaku
         }
         player.mapHeadData = headers.toMutableMap()
-        player.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), displayTitle(book, chapter))
-        preloadVideoWindow(buildChapterCacheKey(source, book, chapter), playUrl, headers)
+        player.setUp(playUrl, false, ExoPlayerHelper.videoBookCacheDir(book), displayTitle(book, chapter))
+        preloadVideoWindow(buildChapterCacheKey(source, book, chapter), playUrl, headers, ExoPlayerHelper.videoBookCacheDir(book))
         if (autoPlay) {
             player.startPlayLogic()
         }
@@ -371,17 +375,34 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     fun refreshCurrentChapter(player: StandardGSYVideoPlayer) {
+        saveRead(videoManager.currentPosition.toInt())
+        clearCurrentChapterPlayLink()
+        videoUrl = null
+        startPlay(player)
+    }
+
+    fun clearCurrentChapterPlayLink() {
         val chapter = chapter ?: return
         val book = book ?: return
         val source = source as? BookSource ?: return
-        saveRead(videoManager.currentPosition.toInt())
-        chapterLinkCache.remove(buildChapterCacheKey(source, book, chapter))
-        chapter.resourceUrl = null
-        Coroutine.async(loadScope, IO) {
-            appDb.bookChapterDao.update(chapter)
+        clearChapterPlayLink(buildChapterCacheKey(source, book, chapter))
+    }
+
+    fun clearChapterPlayLink(cacheKey: String?): Boolean {
+        if (cacheKey.isNullOrBlank()) return false
+        chapterLinkCache.remove(cacheKey)
+        val book = book ?: return true
+        val source = source as? BookSource ?: return true
+        val chapter = toc?.firstOrNull {
+            buildChapterCacheKey(source, book, it) == cacheKey
+        } ?: return true
+        if (chapter.resourceUrl != null) {
+            chapter.resourceUrl = null
+            Coroutine.async(loadScope, IO) {
+                appDb.bookChapterDao.update(chapter)
+            }
         }
-        videoUrl = null
-        startPlay(player)
+        return true
     }
 
     private fun buildChapterCacheKey(source: BookSource, book: Book, chapter: BookChapter): String {
@@ -405,43 +426,104 @@ object VideoPlay : CoroutineScope by MainScope(){
                     chapterLinkCache[nextKey]?.takeIf {
                             System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
                         }?.let { cachedLink ->
-                            withContext(Main) {
-                                queueNextEpisode(nextKey, cachedLink)
+                            if (isPlayLinkReachable(cachedLink)) {
+                                withContext(Main) {
+                                    queueNextEpisode(nextKey, cachedLink)
+                                }
+                                return@withLock
                             }
+                            chapterLinkCache.remove(nextKey)
+                        }
+                    val cachedLink = resolvePreloadLink(source, book, nextChapter)
+                        ?: return@withLock
+                    val playableLink = if (isPlayLinkReachable(cachedLink)) {
+                        cachedLink
+                    } else {
+                        val refreshedLink = resolvePreloadLink(source, book, nextChapter)
+                            ?: return@withLock
+                        if (refreshedLink.playUrl == cachedLink.playUrl ||
+                            !isPlayLinkReachable(refreshedLink)
+                        ) {
                             return@withLock
                         }
-                    val content = WebBook.getContentAwait(source, book, nextChapter).trim()
-                    if (content.isEmpty()) return@withLock
-                    val mUrl = if (content.startsWith("<")) {
-                        val name = MD5Utils.md5Encode(content) + ".mpd"
-                        val file = FileUtils.createFileIfNotExist(videoTempFile, name)
-                        file.writeText(content)
-                        Uri.fromFile(file).toString()
-                    } else {
-                        content
+                        refreshedLink
                     }
-                    val analyzeUrl = AnalyzeUrl(
-                        mUrl,
-                        source = source,
-                        ruleData = book,
-                        chapter = nextChapter
-                    )
-                    val cachedLink = CachedPlayLink(
-                        playUrl = analyzeUrl.url,
-                        headers = analyzeUrl.headerMap.toMap(),
-                        mediaUrl = mUrl,
-                        createdAt = System.currentTimeMillis()
-                    )
-                    chapterLinkCache[nextKey] = cachedLink
-                    preloadVideoWindow(nextKey, analyzeUrl.url, analyzeUrl.headerMap)
+                    chapterLinkCache[nextKey] = playableLink
+                    preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
                     withContext(Main) {
-                        queueNextEpisode(nextKey, cachedLink)
+                        queueNextEpisode(nextKey, playableLink)
                     }
                 } catch (_: Throwable) {
                 } finally {
                     preloadingKeys.remove(nextKey)
                 }
             }
+        }
+    }
+
+    private suspend fun resolvePreloadLink(
+        source: BookSource,
+        book: Book,
+        chapter: BookChapter
+    ): CachedPlayLink? {
+        val content = WebBook.getContentAwait(source, book, chapter).trim()
+        if (content.isEmpty()) return null
+        val mUrl = if (content.startsWith("<")) {
+            val name = MD5Utils.md5Encode(content) + ".mpd"
+            val file = FileUtils.createFileIfNotExist(videoTempFile, name)
+            file.writeText(content)
+            Uri.fromFile(file).toString()
+        } else {
+            content
+        }
+        val analyzeUrl = AnalyzeUrl(
+            mUrl,
+            source = source,
+            ruleData = book,
+            chapter = chapter
+        )
+        return CachedPlayLink(
+            playUrl = analyzeUrl.url,
+            headers = analyzeUrl.headerMap.toMap(),
+            mediaUrl = mUrl,
+            createdAt = System.currentTimeMillis()
+        )
+    }
+
+    private fun isPlayLinkReachable(link: CachedPlayLink): Boolean {
+        val playUrl = link.playUrl
+        if (!playUrl.startsWith("http://", true) &&
+            !playUrl.startsWith("https://", true)
+        ) {
+            return true
+        }
+        val client = okHttpClient.newBuilder()
+            .callTimeout(8, TimeUnit.SECONDS)
+            .build()
+        return try {
+            val headRequest = Request.Builder().apply {
+                url(playUrl)
+                addHeaders(link.headers)
+                head()
+            }.build()
+            client.newCall(headRequest).execute().use { response ->
+                if (response.isSuccessful || response.isRedirect) {
+                    return true
+                }
+                if (response.code != 405) {
+                    return false
+                }
+            }
+            val rangeRequest = Request.Builder().apply {
+                url(playUrl)
+                addHeaders(link.headers)
+                addHeader("Range", "bytes=0-0")
+            }.build()
+            client.newCall(rangeRequest).execute().use { response ->
+                response.isSuccessful || response.isRedirect
+            }
+        } catch (_: Throwable) {
+            false
         }
     }
 
@@ -777,7 +859,8 @@ object VideoPlay : CoroutineScope by MainScope(){
     private fun preloadVideoWindow(
         key: String,
         playUrl: String,
-        headers: Map<String, String>
+        headers: Map<String, String>,
+        cacheDir: File? = null
     ) {
         if (playUrl.isBlank()) return
         val preloadKey = "video:$key"
@@ -785,7 +868,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         Coroutine.async(loadScope, IO) {
             try {
                 ExoPlayerHelper.preloadVideoWindow(
-                    ExoPlayerHelper.MediaRequest(playUrl, headers)
+                    ExoPlayerHelper.MediaRequest(playUrl, headers),
+                    cacheDir = cacheDir
                 ) {
                     !videoPreloadingKeys.contains(preloadKey)
                 }

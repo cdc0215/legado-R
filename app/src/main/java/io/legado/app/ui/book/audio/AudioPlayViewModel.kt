@@ -16,6 +16,7 @@ import io.legado.app.data.entities.BookProgressComparison
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.getBookSource
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
@@ -113,6 +114,7 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
             }
             appDb.bookChapterDao.delByBook(oldBook.bookUrl)
             appDb.bookChapterDao.insert(*cList.toTypedArray())
+            CacheManifestHelper.refreshAsync(book, cList)
             AudioPlay.chapterSize = cList.size
             AudioPlay.simulatedChapterSize = book.simulatedTotalChapterNum()
             AudioPlay.upDurChapter()
@@ -141,6 +143,7 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
             AudioPlay.book = book
             AudioPlay.bookSource = source
             appDb.bookChapterDao.insert(*toc.toTypedArray())
+            CacheManifestHelper.refreshAsync(book, toc)
             AudioPlay.upDurChapter()
         }.onFinally {
             postEvent(EventBus.SOURCE_CHANGED, book.bookUrl)

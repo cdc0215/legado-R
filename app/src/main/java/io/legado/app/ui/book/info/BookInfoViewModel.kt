@@ -22,6 +22,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.CacheManifestHelper
 import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.getRemoteUrl
 import io.legado.app.help.book.isAudio
@@ -272,6 +273,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     appDb.bookDao.update(book)
                     appDb.bookChapterDao.delByBook(book.bookUrl)
                     appDb.bookChapterDao.insert(*it.toTypedArray())
+                    CacheManifestHelper.refreshAsync(book, it)
                     ReadBook.onChapterListUpdated(book)
                     bookData.postValue(book)
                     chapterListData.postValue(it)
@@ -312,6 +314,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                         }
                         appDb.bookChapterDao.delByBook(oldBook.bookUrl)
                         appDb.bookChapterDao.insert(*it.toTypedArray())
+                        CacheManifestHelper.refreshAsync(book, it)
                         ReadBook.onChapterListUpdated(book)
                     }
                     bookData.postValue(book)
@@ -448,6 +451,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 bookData.value?.delete()
                 appDb.bookDao.insert(book)
                 appDb.bookChapterDao.insert(*toc.toTypedArray())
+                CacheManifestHelper.refreshAsync(book, toc)
             }
             bookData.postValue(book)
             chapterListData.postValue(toc)
@@ -495,6 +499,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         execute {
             chapterListData.value?.let {
                 appDb.bookChapterDao.insert(*it.toTypedArray())
+                bookData.value?.let { book -> CacheManifestHelper.refreshAsync(book, it) }
             }
         }.onSuccess {
             success?.invoke()
@@ -517,6 +522,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             }
             chapterListData.value?.let {
                 appDb.bookChapterDao.insert(*it.toTypedArray())
+                CacheManifestHelper.refreshAsync(book, it)
             }
         }.onSuccess {
             success?.invoke()
@@ -547,6 +553,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             }
             chapterListData.value?.let {
                 appDb.bookChapterDao.insert(*it.toTypedArray())
+                bookData.value?.let { book -> CacheManifestHelper.refreshAsync(book, it) }
             }
             inBookshelf = true
         }.onSuccess {
@@ -586,8 +593,15 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
     private fun clearBookCache(book: Book) {
         if (book.isAudio || book.isVideo) {
             appDb.bookChapterDao.getChapterList(book.bookUrl)
-                .forEach { ExoPlayerHelper.removeMediaCache(it.resourceUrl) }
+                .forEach {
+                    if (book.isVideo) {
+                        ExoPlayerHelper.removeVideoCache(it.resourceUrl, book)
+                    } else {
+                        ExoPlayerHelper.removeMediaCache(it.resourceUrl, book)
+                    }
+                }
         }
+        ExoPlayerHelper.releaseBookCaches(book)
         BookHelp.clearCache(book)
         if (ReadBook.book?.bookUrl == book.bookUrl) {
             ReadBook.clearTextChapter()
