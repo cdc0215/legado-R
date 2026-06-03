@@ -724,7 +724,11 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             ),
             CacheStorageGroup(
                 context.getString(R.string.cache_manage_storage_image_temp),
-                listOf(File(internalCache, "tmp"), File(internalCache, "image_crop_source")),
+                listOf(
+                    File(internalCache, "tmp"),
+                    File(internalCache, "image_crop_source"),
+                    File(externalCache, "qr.png")
+                ),
                 CacheStorageDeleteTarget.IMAGE_TEMP
             ),
             CacheStorageGroup(
@@ -765,6 +769,11 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 CacheStorageDeleteTarget.UPLOAD
             ),
             CacheStorageGroup(
+                context.getString(R.string.cache_manage_storage_import_temp),
+                listOf(File(externalCache, "download")),
+                CacheStorageDeleteTarget.IMPORT_TEMP
+            ),
+            CacheStorageGroup(
                 context.getString(R.string.cache_manage_storage_logs),
                 listOf(
                     File(externalCache, "logs"),
@@ -779,6 +788,11 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 context.getString(R.string.cache_manage_storage_archive_temp),
                 listOf(File(externalCache, "ArchiveTemp")),
                 CacheStorageDeleteTarget.ARCHIVE_TEMP
+            ),
+            CacheStorageGroup(
+                context.getString(R.string.cache_manage_storage_cronet_cache),
+                listOf(File(externalCache, "app_cronet")),
+                CacheStorageDeleteTarget.CRONET_CACHE
             )
         )
         val knownExternalFiles = listOf(
@@ -836,6 +850,10 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             CacheStorageDetail(
                 context.getString(R.string.cache_manage_storage_internal_files),
                 filesDir.childrenSize(excludes = setOf("ACache"))
+            ),
+            CacheStorageDetail(
+                context.getString(R.string.cache_manage_storage_cronet_component),
+                File(dataDir, "app_cronet").directorySize()
             )
         )
         val explicitDetails = buildList {
@@ -845,6 +863,13 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             addAll(userDataDetails)
             addAll(internalDetails)
             addAll(externalDetails)
+            add(
+                CacheStorageDetail(
+                    context.getString(R.string.cache_manage_storage_other_temp),
+                    otherExternalTempFiles().sumOf { it.directorySize() },
+                    CacheStorageDeleteTarget.OTHER_TEMP
+                )
+            )
         }
         val explicitSize = explicitDetails.sumOf { it.bytes }
         val otherSize = (getAppStorageSize() - explicitSize).coerceAtLeast(0L)
@@ -907,7 +932,11 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             CacheStorageDeleteTarget.SHARE_JS -> listOf(File(internalCache, "shareJs"))
             CacheStorageDeleteTarget.TTS -> listOf(File(internalCache, "httpTTS"), File(internalCache, "httpTTS_cache"))
             CacheStorageDeleteTarget.EPUB_TEMP -> listOf(File(internalCache, "epub-fonts"), File(internalCache, "epub-debug"))
-            CacheStorageDeleteTarget.IMAGE_TEMP -> listOf(File(internalCache, "tmp"), File(internalCache, "image_crop_source"))
+            CacheStorageDeleteTarget.IMAGE_TEMP -> listOf(
+                File(internalCache, "tmp"),
+                File(internalCache, "image_crop_source"),
+                File(externalCache, "qr.png")
+            )
             CacheStorageDeleteTarget.SO_DOWNLOAD -> listOf(File(internalCache, "so_download"))
             CacheStorageDeleteTarget.TEMP_BOOK_CACHE -> File(BookHelp.cachePath)
                 .listFiles()
@@ -925,6 +954,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             CacheStorageDeleteTarget.CACHE_PACKAGE -> listOf(File(externalCache, "cache_package"))
             CacheStorageDeleteTarget.READ_CONFIG -> listOf(File(externalCache, "readConfig"), File(externalCache, "readConfig.zip"))
             CacheStorageDeleteTarget.UPLOAD -> listOf(File(externalCache, "upload"))
+            CacheStorageDeleteTarget.IMPORT_TEMP -> listOf(File(externalCache, "download"))
             CacheStorageDeleteTarget.LOGS -> listOf(
                 File(externalCache, "logs"),
                 File(externalCache, "crash"),
@@ -933,10 +963,52 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 File(externalCache, "heapDump")
             )
             CacheStorageDeleteTarget.ARCHIVE_TEMP -> listOf(File(externalCache, "ArchiveTemp"))
+            CacheStorageDeleteTarget.CRONET_CACHE -> listOf(File(externalCache, "app_cronet"))
+            CacheStorageDeleteTarget.OTHER_TEMP -> otherExternalTempFiles()
         }
         paths.forEach { file ->
             if (file.exists()) FileUtils.delete(file, deleteRootDir = true)
         }
+    }
+
+    private fun otherExternalTempFiles(): List<File> {
+        val externalCache = appCtx.externalCache
+        val knownRoots = knownExternalCacheRoots(externalCache)
+            .mapTo(hashSetOf()) { it.absolutePath }
+        val roots = buildList {
+            add(externalCache)
+            addAll(appCtx.externalCacheDirs.filterNotNull())
+        }.filter { it.exists() && it.isDirectory }
+            .distinctBy { it.absolutePath }
+        return roots.flatMap { root ->
+            root.listFiles()
+                ?.filterNot { it.absolutePath in knownRoots }
+                .orEmpty()
+        }
+    }
+
+    private fun knownExternalCacheRoots(externalCache: File): List<File> {
+        return listOf(
+            File(externalCache, "qr.png"),
+            File(externalCache, "audio_exoplayer"),
+            File(externalCache, "audio_exoplayer_complete"),
+            File(externalCache, "exoplayer"),
+            File(externalCache, "exoplayer_complete"),
+            File(externalCache, "video_temp"),
+            File(externalCache, "video_temp_cache"),
+            File(externalCache, "cache_package"),
+            File(externalCache, "readConfig"),
+            File(externalCache, "readConfig.zip"),
+            File(externalCache, "upload"),
+            File(externalCache, "download"),
+            File(externalCache, "logs"),
+            File(externalCache, "crash"),
+            File(externalCache, "logcat.txt"),
+            File(externalCache, "logs.zip"),
+            File(externalCache, "heapDump"),
+            File(externalCache, "ArchiveTemp"),
+            File(externalCache, "app_cronet")
+        )
     }
 
     private fun getAppStorageSize(): Long {
@@ -1244,8 +1316,11 @@ enum class CacheStorageDeleteTarget {
     CACHE_PACKAGE,
     READ_CONFIG,
     UPLOAD,
+    IMPORT_TEMP,
     LOGS,
-    ARCHIVE_TEMP
+    ARCHIVE_TEMP,
+    CRONET_CACHE,
+    OTHER_TEMP
 }
 
 private data class MediaCacheManifest(

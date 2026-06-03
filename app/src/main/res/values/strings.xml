@@ -1845,6 +1845,8 @@
     <string name="cache_manage_storage_epub_temp">EPUB temporary cache</string>
     <string name="cache_manage_storage_image_temp">Image temp files</string>
     <string name="cache_manage_storage_so_download">Native library temp</string>
+    <string name="cache_manage_storage_cronet_component">Cronet network component files</string>
+    <string name="cache_manage_storage_cronet_cache">Cronet network cache</string>
     <string name="cache_manage_storage_other_code">Other code cache</string>
     <string name="cache_manage_storage_audio_offline">Temporary audio cache</string>
     <string name="cache_manage_storage_audio_markers">Audio completion markers</string>
@@ -1854,8 +1856,10 @@
     <string name="cache_manage_storage_video_temp">Video temp manifests</string>
     <string name="cache_manage_storage_read_config">Reading config temp</string>
     <string name="cache_manage_storage_upload_temp">Upload temp</string>
+    <string name="cache_manage_storage_import_temp">Import temp files</string>
     <string name="cache_manage_storage_logs">Logs and crash files</string>
     <string name="cache_manage_storage_archive_temp">Archive temp files</string>
+    <string name="cache_manage_storage_other_temp">Other temporary cache</string>
     <string name="cache_manage_storage_other">Other</string>
     <string name="cache_manage_storage_other_internal">Other internal cache</string>
     <string name="cache_manage_storage_other_external">Other external cache</string>

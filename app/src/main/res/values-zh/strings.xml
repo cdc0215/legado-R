@@ -1725,6 +1725,8 @@
     <string name="cache_manage_storage_epub_temp">EPUB 临时缓存</string>
     <string name="cache_manage_storage_image_temp">图片临时文件</string>
     <string name="cache_manage_storage_so_download">原生库临时文件</string>
+    <string name="cache_manage_storage_cronet_component">Cronet 网络组件文件</string>
+    <string name="cache_manage_storage_cronet_cache">Cronet 网络缓存</string>
     <string name="cache_manage_storage_other_code">其它代码缓存</string>
     <string name="cache_manage_storage_audio_offline">临时音频缓存</string>
     <string name="cache_manage_storage_audio_markers">音频完成标记</string>
@@ -1734,8 +1736,10 @@
     <string name="cache_manage_storage_video_temp">视频临时清单</string>
     <string name="cache_manage_storage_read_config">阅读配置临时文件</string>
     <string name="cache_manage_storage_upload_temp">上传临时文件</string>
+    <string name="cache_manage_storage_import_temp">导入临时文件</string>
     <string name="cache_manage_storage_logs">日志和崩溃文件</string>
     <string name="cache_manage_storage_archive_temp">压缩包临时文件</string>
+    <string name="cache_manage_storage_other_temp">其它临时缓存</string>
     <string name="cache_manage_storage_other">其它</string>
     <string name="cache_manage_storage_other_internal">其它内部缓存</string>
     <string name="cache_manage_storage_other_external">其它外部缓存</string>
