@@ -373,6 +373,10 @@ class CoverImageView @JvmOverloads constructor(
                 .format(DecodeFormat.PREFER_ARGB_8888)
                 .disallowHardwareConfig()
                 .set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)
+                .set(
+                    OkHttpModelLoader.stableCoverCacheKeyOption,
+                    stableCoverCacheKey(normalizedPath, currentName, currentAuthor, sourceOrigin)
+                )
             if (sourceOrigin != null) {
                 options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
             }
@@ -443,6 +447,25 @@ class CoverImageView @JvmOverloads constructor(
                 })
                 .into(this)
         }
+    }
+
+    private fun stableCoverCacheKey(
+        path: String?,
+        name: String?,
+        author: String?,
+        sourceOrigin: String?
+    ): String {
+        val stablePath = path
+            ?.substringBefore('#')
+            ?.substringBefore('?')
+            .orEmpty()
+        return listOf(
+            "cover",
+            sourceOrigin.orEmpty(),
+            name.orEmpty(),
+            author.orEmpty(),
+            stablePath
+        ).joinToString("|")
     }
 
     override fun onDetachedFromWindow() {
