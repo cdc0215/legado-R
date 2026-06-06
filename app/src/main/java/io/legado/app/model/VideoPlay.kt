@@ -78,6 +78,8 @@ object VideoPlay : CoroutineScope by MainScope(){
     private var needClearTemp = true //需要清理缓存
     private const val VIDEO_TEMP_PATH = "video_temp"
     private const val CHAPTER_LINK_CACHE_TTL = 30 * 60 * 1000L
+    private const val VIDEO_SEAMLESS_PRELOAD_DURATION_MS = 15L * 1000
+    private const val VIDEO_NEXT_PRELOAD_DURATION_MS = 2L * 60 * 1000
     private val videoTempFile by lazy { File(FileUtils.getCachePath(), VIDEO_TEMP_PATH) }
     private data class CachedPlayLink(
         val playUrl: String,
@@ -177,7 +179,6 @@ object VideoPlay : CoroutineScope by MainScope(){
                     setResolvingLoading(player, false)
                     player.mapHeadData = playLink.headers.toMutableMap()
                     player.setUp(playLink.playUrl, false, File(appCtx.externalCache, "exoplayer"), displayTitle())
-                    preloadVideoWindow("single:${playLink.playUrl}", playLink.playUrl, playLink.headers)
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
@@ -211,7 +212,6 @@ object VideoPlay : CoroutineScope by MainScope(){
                             File(appCtx.externalCache, "exoplayer"),
                             rssArticle.title
                         )
-                        preloadVideoWindow("rss:${rssArticle.link}", playLink.playUrl, playLink.headers)
                         if (autoPlay) {
                             player.startPlayLogic()
                         }
@@ -241,7 +241,6 @@ object VideoPlay : CoroutineScope by MainScope(){
                             setResolvingLoading(player, false)
                             player.mapHeadData = playLink.headers.toMutableMap()
                             player.setUp(playLink.playUrl, false, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
-                            preloadVideoWindow("rss:${rssArticle.link}", playLink.playUrl, playLink.headers)
                             if (autoPlay) {
                                 player.startPlayLogic()
                             }
@@ -298,13 +297,11 @@ object VideoPlay : CoroutineScope by MainScope(){
                 setResolvingLoading(player, false)
                 player.mapHeadData = playableLink.headers.toMutableMap()
                 player.setUp(playUrl, false, ExoPlayerHelper.videoBookCacheDir(book), displayTitle(book, chapter))
-                preloadVideoWindow(chapterCacheKey, playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
                 if (autoPlay) {
                     player.startPlayLogic()
                 }
                 setupSeamlessTransitionListener()
             }
-            preloadNextEpisode(chapterSource, book)
         }.onError {
             setResolvingLoading(player, false)
             AppLog.put("获取资源链接出错\n$it", it, true)
@@ -355,16 +352,11 @@ object VideoPlay : CoroutineScope by MainScope(){
     private fun preloadNextEpisode(source: BookSource, book: Book) {
         val nextChapter = episodes?.getOrNull(chapterInVolumeIndex + 1) ?: return
         val nextKey = buildChapterCacheKey(source, book, nextChapter)
-        val cached = chapterLinkCache[nextKey]?.takeIf {
-            System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
-        }
-        if (cached != null) {
-            queueNextEpisode(nextKey, cached)
-            return
-        }
+        cancelObsoletePreloads(nextKey)
         if (!preloadingKeys.add(nextKey)) return
         Coroutine.async(loadScope, IO) {
             preloadMutex.withLock {
+                if (!preloadingKeys.contains(nextKey)) return@withLock
                 try {
                     chapterLinkCache[nextKey]?.takeIf {
                             System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
@@ -373,10 +365,13 @@ object VideoPlay : CoroutineScope by MainScope(){
                                 resolveChapterLink(source, book, nextChapter)
                             }
                             chapterLinkCache[nextKey] = playableLink
-                            preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
+                            preloadVideoWindowAwait(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
+                            if (!preloadingKeys.contains(nextKey)) return@withLock
                             withContext(Main) {
                                 queueNextEpisode(nextKey, playableLink)
                             }
+                            if (!preloadingKeys.contains(nextKey)) return@withLock
+                            preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
                             return@withLock
                         }
                     val cachedLink = resolveChapterLink(source, book, nextChapter)
@@ -385,10 +380,13 @@ object VideoPlay : CoroutineScope by MainScope(){
                         resolveChapterLink(source, book, nextChapter)
                     }
                     chapterLinkCache[nextKey] = playableLink
-                    preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
+                    preloadVideoWindowAwait(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
+                    if (!preloadingKeys.contains(nextKey)) return@withLock
                     withContext(Main) {
                         queueNextEpisode(nextKey, playableLink)
                     }
+                    if (!preloadingKeys.contains(nextKey)) return@withLock
+                    preloadVideoWindow(nextKey, playableLink.playUrl, playableLink.headers, ExoPlayerHelper.videoBookCacheDir(book))
                 } catch (_: Throwable) {
                 } finally {
                     preloadingKeys.remove(nextKey)
@@ -790,12 +788,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun queuePreparedNextEpisode() {
         val source = source as? BookSource ?: return
         val book = book ?: return
-        val nextChapter = episodes?.getOrNull(chapterInVolumeIndex + 1) ?: return
-        val nextKey = buildChapterCacheKey(source, book, nextChapter)
-        val cached = chapterLinkCache[nextKey]?.takeIf {
-            System.currentTimeMillis() - it.createdAt <= CHAPTER_LINK_CACHE_TTL
-        } ?: return
-        queueNextEpisode(nextKey, cached)
+        preloadNextEpisode(source, book)
     }
 
     private fun setupSeamlessTransitionListener() {
@@ -866,7 +859,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         key: String,
         playUrl: String,
         headers: Map<String, String>,
-        cacheDir: File? = null
+        cacheDir: File? = null,
+        durationMs: Long = VIDEO_NEXT_PRELOAD_DURATION_MS
     ) {
         if (playUrl.isBlank()) return
         val preloadKey = "video:$key"
@@ -875,7 +869,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             try {
                 ExoPlayerHelper.preloadVideoWindow(
                     ExoPlayerHelper.MediaRequest(playUrl, headers),
-                    cacheDir = cacheDir
+                    cacheDir = cacheDir,
+                    durationMs = durationMs
                 ) {
                     !videoPreloadingKeys.contains(preloadKey)
                 }
@@ -884,6 +879,33 @@ object VideoPlay : CoroutineScope by MainScope(){
             } finally {
                 videoPreloadingKeys.remove(preloadKey)
             }
+        }
+    }
+
+    private fun cancelObsoletePreloads(activeKey: String) {
+        val activeVideoKey = "video:$activeKey"
+        preloadingKeys.removeIf { it != activeKey }
+        videoPreloadingKeys.removeIf { it != activeVideoKey }
+    }
+
+    private fun preloadVideoWindowAwait(
+        key: String,
+        playUrl: String,
+        headers: Map<String, String>,
+        cacheDir: File? = null
+    ): Long {
+        if (playUrl.isBlank()) return 0L
+        return try {
+            ExoPlayerHelper.preloadVideoWindow(
+                ExoPlayerHelper.MediaRequest(playUrl, headers),
+                cacheDir = cacheDir,
+                durationMs = VIDEO_SEAMLESS_PRELOAD_DURATION_MS
+            ) {
+                !preloadingKeys.contains(key)
+            }
+        } catch (e: Throwable) {
+            AppLog.putDebug("视频首段预加载失败: ${e.localizedMessage ?: e.javaClass.simpleName}")
+            0L
         }
     }
 

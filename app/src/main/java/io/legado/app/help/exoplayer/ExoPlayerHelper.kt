@@ -363,14 +363,26 @@ object ExoPlayerHelper {
         }
         val preloadBytes = estimatePreloadBytes(durationMs)
         val dataSource = videoPreloadDataSourceFactory(request.headers, cacheDir).createDataSource()
-        val writer = CacheWriter(
+        var writer: CacheWriter? = null
+        val progressListener = object : CacheWriter.ProgressListener {
+            override fun onProgress(
+                requestLength: Long,
+                bytesCached: Long,
+                newBytesCached: Long
+            ) {
+                if (shouldCancel?.invoke() == true) {
+                    writer?.cancel()
+                }
+            }
+        }
+        writer = CacheWriter(
             dataSource,
             DataSpec.Builder()
                 .setUri(Uri.parse(url))
                 .setLength(preloadBytes)
                 .build(),
             null,
-            null
+            progressListener
         )
         var cancelled = false
         try {

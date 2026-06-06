@@ -361,7 +361,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             BookGroup.IdImage -> type and BookType.image > 0
             BookGroup.IdVideo -> type and BookType.video > 0
             BookGroup.IdError -> type and BookType.updateError > 0
-            BookGroup.IdUngrouped -> userGroupIds and group == 0L
+            BookGroup.IdUngrouped -> userGroupIds and group == 0L && type and BookType.local == 0
             else -> groupId > 0 && group and groupId > 0
         }
     }

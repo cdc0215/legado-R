@@ -214,7 +214,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(insertBookGroupUngroupedSql)
                 @Language("sql")
                 val updateBookGroupUngroupedSql =
-                    "update book_groups set groupName = '${appCtx.getString(R.string.no_group)}' where groupId = ${BookGroup.IdUngrouped}"
+                    """
+                    update book_groups
+                    set groupName = '${appCtx.getString(R.string.no_group)}'
+                    where groupId = ${BookGroup.IdUngrouped}
+                    and trim(groupName) = ''
+                    """.trimIndent()
                 db.execSQL(updateBookGroupUngroupedSql)
                 @Language("sql")
                 val deleteBookGroupLocalNoneSql = "delete from book_groups where groupId = -5"
