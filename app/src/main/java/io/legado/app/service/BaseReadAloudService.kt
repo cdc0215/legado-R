@@ -982,7 +982,10 @@ abstract class BaseReadAloudService : BaseService(),
     abstract fun upSpeechRate(reset: Boolean = false)
 
     fun upTtsProgress(progress: Int) {
-        postEvent(EventBus.TTS_PROGRESS, progress)
+        postEvent(EventBus.TTS_PROGRESS, Bundle().apply {
+            putInt("chapterIndex", textChapter?.chapter?.index ?: ReadBook.durChapterIndex)
+            putInt("chapterPos", progress)
+        })
     }
 
     protected fun upReadAloudLoading(loading: Boolean) {
