@@ -1219,6 +1219,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         when {
             isAutoPage -> showDialogFragment<AutoReadDialog>()
             isShowingSearchResult -> binding.searchMenu.runMenuIn()
+            BaseReadAloudService.isRun && AppConfig.readAloudHideFloatingWindow -> showReadAloudDialog()
             else -> binding.readMenu.runMenuIn()
         }
     }

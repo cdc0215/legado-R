@@ -36,6 +36,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
     private val callBack: CallBack? get() = activity as? CallBack
     private val binding by viewBinding(DialogReadAloudBinding::bind)
     private var loadingAnimator: ObjectAnimator? = null
+    private var showMainMenuOnDismiss = false
 
     override fun onStart() {
         super.onStart()
@@ -62,6 +63,10 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
         (activity as? ReadBookActivity)?.clearReadAloudFloatingAvoidance(
             EventBus.FLOATING_AVOID_SOURCE_READ_ALOUD_DIALOG
         )
+        if (showMainMenuOnDismiss) {
+            showMainMenuOnDismiss = false
+            callBack?.showMenuBar()
+        }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -118,9 +123,13 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud),
 
     private fun initEvent() = binding.run {
         ivCatalog.gone()
-        llMainMenu.gone()
+        llMainMenu.visible(AppConfig.readAloudHideFloatingWindow && BaseReadAloudService.isRun)
         llCatalog.setOnClickListener {
             SpeakEngineDialog().show(childFragmentManager, "speakEngineDialog")
+        }
+        llMainMenu.setOnClickListener {
+            showMainMenuOnDismiss = true
+            dismissAllowingStateLoss()
         }
         llSetting.setOnClickListener {
             ReadAloudConfigDialog().show(childFragmentManager, "readAloudConfigDialog")
