@@ -95,12 +95,12 @@ object ReadRecordWidgetStore {
     }
 
     fun loadRecentVisualItems(limit: Int): List<ReadRecentVisualItem> {
-        val booksByUrl = appDb.bookDao.all.associateBy { it.bookUrl }
+        val booksByUrl = appDb.bookDao.allReadRecordInfo.associateBy { it.bookUrl }
         return loadRecentSnapshots()
             .sortedByDescending { it.lastRead }
             .distinctBy { it.identityKey() }
             .take(limit)
-            .map { ReadRecentVisualItem(it, booksByUrl[it.bookUrl]) }
+            .map { ReadRecentVisualItem(it, booksByUrl[it.bookUrl]?.toBook()) }
     }
 
     fun loadGoalConfig(): ReadRecordGoalConfig {
@@ -116,8 +116,8 @@ object ReadRecordWidgetStore {
 
     fun buildRankItems(limit: Int? = null): List<ReadRecordRankItem> {
         val readRecords = appDb.readRecordDao.allShow.sortedByDescending { it.readTime }
-        val booksByName = appDb.bookDao.all.groupBy { it.name }.mapValues { entry ->
-            entry.value.maxByOrNull { it.durChapterTime }
+        val booksByName = appDb.bookDao.allReadRecordInfo.groupBy { it.name }.mapValues { entry ->
+            entry.value.maxByOrNull { it.durChapterTime }?.toBook()
         }
         val snapshotsByName = loadRecentSnapshots()
             .sortedByDescending { it.lastRead }

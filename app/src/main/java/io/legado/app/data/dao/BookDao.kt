@@ -15,6 +15,30 @@ import io.legado.app.help.book.isNotShelf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+data class BookReadRecordInfo(
+    val bookUrl: String,
+    val name: String,
+    val author: String,
+    val coverUrl: String?,
+    val customCoverUrl: String?,
+    val origin: String,
+    val originName: String,
+    val type: Int,
+    val durChapterTime: Long
+) {
+    fun toBook() = Book(
+        bookUrl = bookUrl,
+        name = name,
+        author = author,
+        coverUrl = coverUrl,
+        customCoverUrl = customCoverUrl,
+        origin = origin,
+        originName = originName,
+        type = type,
+        durChapterTime = durChapterTime
+    )
+}
+
 @Dao
 interface BookDao {
 
@@ -114,6 +138,14 @@ interface BookDao {
 
     @get:Query("SELECT * FROM books")
     val all: List<Book>
+
+    @get:Query(
+        """
+        SELECT bookUrl, name, author, coverUrl, customCoverUrl, origin, originName, type, durChapterTime
+        FROM books
+        """
+    )
+    val allReadRecordInfo: List<BookReadRecordInfo>
 
     @get:Query("SELECT * FROM books where type & ${BookType.notShelf} > 0")
     val notShelfBooks: List<Book>
