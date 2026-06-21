@@ -45,6 +45,10 @@ object ImageProvider {
         BitmapFactory.decodeResource(appCtx.resources, R.drawable.image_loading_error)
     }
 
+    val loadingBitmap: Bitmap by lazy {
+        BitmapFactory.decodeResource(appCtx.resources, R.drawable.image_cover_default)
+    }
+
     /**
      * 缓存bitmap LruCache实现
      * filePath bitmap
@@ -111,6 +115,10 @@ object ImageProvider {
             return null
         }
         return bitmap
+    }
+
+    fun isImageExist(book: Book, src: String): Boolean {
+        return BookHelp.isImageExist(book, src)
     }
 
     private fun ensureLruCacheSize(bitmap: Bitmap) {

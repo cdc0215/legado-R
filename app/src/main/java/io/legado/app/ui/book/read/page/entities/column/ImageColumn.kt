@@ -20,7 +20,8 @@ data class ImageColumn(
     override var start: Float,
     override var end: Float,
     var src: String,
-    var click: String? = null
+    var click: String? = null,
+    var lazyLoad: Boolean = false
 ) : BaseColumn {
 
     override var textLine: TextLine = emptyTextLine
@@ -29,12 +30,26 @@ data class ImageColumn(
 
         val height = textLine.height
 
-        val bitmap = ImageProvider.getImage(
-            book,
-            src,
-            (end - start).toInt(),
-            height.toInt()
-        )
+        val width = (end - start).toInt().coerceAtLeast(1)
+        val bitmap = if (lazyLoad && !ImageProvider.isImageExist(book, src)) {
+            ImageProvider.cacheImageAsync(
+                book = book,
+                src = src,
+                bookSource = ReadBook.bookSource,
+                width = width,
+                height = height.toInt().coerceAtLeast(1)
+            ) {
+                textLine.invalidate()
+            }
+            ImageProvider.loadingBitmap
+        } else {
+            ImageProvider.getImage(
+                book,
+                src,
+                width,
+                height.toInt()
+            )
+        }
 
         val rectF = if (textLine.isImage) {
             RectF(start, 0f, end, height)

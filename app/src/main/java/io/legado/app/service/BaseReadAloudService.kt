@@ -11,6 +11,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -174,6 +175,7 @@ abstract class BaseReadAloudService : BaseService(),
     private var readBookActivityActive = false
     private var currentAvoidanceSource: String? = null
     private var currentAvoidanceY: Int = 0
+    private var rebuildFloatingJob: Job? = null
     private val isDesktopFloating: Boolean get() = floatingWindowManager != null
     private val floatingHeight get() = 50.dpToPx()
     private val floatingMinY get() = 24.dpToPx()
@@ -734,6 +736,20 @@ abstract class BaseReadAloudService : BaseService(),
     private fun rebuildReadAloudFloatingWindow() {
         removeReadAloudFloatingWindow()
         showReadAloudFloatingWindow()
+    }
+
+    private fun rebuildReadAloudFloatingWindowDelay() {
+        rebuildFloatingJob?.cancel()
+        rebuildFloatingJob = lifecycleScope.launch(Main) {
+            delay(300)
+            rebuildReadAloudFloatingWindow()
+        }
+    }
+
+    @CallSuper
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        rebuildReadAloudFloatingWindowDelay()
     }
 
     private fun onReadAloudFloatingAvoidance(source: String, y: Int) {
